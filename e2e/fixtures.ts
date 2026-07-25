@@ -18,7 +18,13 @@ export const test = base.extend<Fixtures>({
     for (const name of created) {
       const row = page.locator('li').filter({ hasText: name });
       if (await row.count()) {
+        // Delete now opens a confirmation dialog rather than deleting
+        // directly — confirm it before moving on.
         await row.getByRole('button', { name: 'Delete' }).click();
+        await page
+          .getByRole('alertdialog')
+          .getByRole('button', { name: 'Delete' })
+          .click();
       }
     }
   },

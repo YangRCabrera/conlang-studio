@@ -2,10 +2,12 @@
 
 import { phonemes } from '@/app/db/schema';
 import { PhonemeGroupWithMembers } from '@/app/lib/phoneme-groups';
-import { useActionState, useState } from 'react';
+import { useActionState, useRef, useState } from 'react';
 import { createGroup, deleteGroup, updateGroup } from './actions';
 import { anyFieldError, failureMessage } from '@/app/components/action-state';
+import { useDeleteFocusRecovery } from '@/app/components/use-delete-focus-recovery';
 import { Button } from '@/app/components/ui/button';
+import { DeleteConfirmDialog } from '@/app/components/ui/delete-confirm-dialog';
 import { FormError } from '@/app/components/ui/form-error';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
@@ -16,7 +18,13 @@ function formatPhonemePresentation({ symbol, ipa }: Phoneme) {
   return `[ <${symbol}>${ipa?.length ? ` /${ipa}/` : ''} ]`;
 }
 
-function AddGroupForm({ languageId }: { languageId: string }) {
+function AddGroupForm({
+  languageId,
+  nameInputRef,
+}: {
+  languageId: string;
+  nameInputRef: React.RefObject<HTMLInputElement | null>;
+}) {
   const [createState, createAction, createPending] = useActionState(
     createGroup.bind(null, languageId),
     null,
@@ -26,6 +34,7 @@ function AddGroupForm({ languageId }: { languageId: string }) {
     <form action={createAction} className="flex flex-col gap-2 mb-6">
       <div className="flex items-center gap-2 px-2">
         <Input
+          ref={nameInputRef}
           name="name"
           placeholder="New Group"
           required
@@ -117,16 +126,30 @@ function GroupRow({
   group,
   phonemes,
   canEdit,
+  fallbackFocusRef,
 }: {
   languageId: string;
   group: PhonemeGroupWithMembers;
   phonemes: Phoneme[];
   canEdit: boolean;
+  fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
 
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { rowRef, focusOverrideRef, captureFocusTarget } =
+    useDeleteFocusRecovery<HTMLLIElement>(fallbackFocusRef);
+
   const [deleteState, deleteAction, deletePending] = useActionState(
-    deleteGroup.bind(null, languageId, group.id),
+    async (
+      prev: Awaited<ReturnType<typeof deleteGroup>> | null,
+      formData: FormData,
+    ) => {
+      captureFocusTarget();
+      const result = await deleteGroup(languageId, group.id, prev, formData);
+      if (result.ok) setDeleteDialogOpen(false);
+      return result;
+    },
     null,
   );
 
@@ -162,7 +185,7 @@ function GroupRow({
   }
 
   return (
-    <li className="flex flex-col gap-2 rounded-lg border bg-card p-3">
+    <li ref={rowRef} className="flex flex-col gap-2 rounded-lg border bg-card p-3">
       <div className="flex flex-row items-center gap-2">
         <div className="flex-1 flex flex-row">
           <p className="w-1/4">
@@ -187,20 +210,38 @@ function GroupRow({
             >
               Edit
             </Button>
-            <form action={deleteAction}>
-              <Button
-                type="submit"
-                variant="destructive"
-                disabled={deletePending}
-                className="w-32"
-              >
-                Delete
-              </Button>
-            </form>
+            <DeleteConfirmDialog
+              open={deleteDialogOpen}
+              onOpenChange={setDeleteDialogOpen}
+              focusOverrideRef={focusOverrideRef}
+              trigger={
+                <Button
+                  type="button"
+                  variant="destructive"
+                  data-delete-trigger
+                  className="w-32"
+                >
+                  Delete
+                </Button>
+              }
+              title={`Delete group "${group.name}"?`}
+              description="This deletes the phoneme group. Syllable structures that reference it will lose that slot. This can't be undone."
+            >
+              <form action={deleteAction}>
+                <Button
+                  type="submit"
+                  variant="destructive"
+                  disabled={deletePending}
+                  className="w-32"
+                >
+                  {deletePending ? 'Deleting…' : 'Delete'}
+                </Button>
+                <FormError message={failureMessage(deleteState)} />
+              </form>
+            </DeleteConfirmDialog>
           </>
         )}
       </div>
-      <FormError message={failureMessage(deleteState)} />
     </li>
   );
 }
@@ -216,9 +257,13 @@ export default function PhonemeGroupsList({
   phonemes: Phoneme[];
   canEdit: boolean;
 }) {
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <div>
-      {canEdit && <AddGroupForm languageId={languageId} />}
+      {canEdit && (
+        <AddGroupForm languageId={languageId} nameInputRef={nameInputRef} />
+      )}
       {initialGroups.length === 0 ? (
         <p className="text-muted-foreground">
           No phoneme groups yet. Add one above.
@@ -234,6 +279,7 @@ export default function PhonemeGroupsList({
                 languageId={languageId}
                 phonemes={phonemes}
                 canEdit={canEdit}
+                fallbackFocusRef={nameInputRef}
               />
             ))}
         </ul>

@@ -1,7 +1,7 @@
 'use client';
 
 import { lexemes, senses, tags } from '@/app/db/schema';
-import { useActionState, useMemo, useState } from 'react';
+import { useActionState, useMemo, useRef, useState } from 'react';
 import {
   addSenseToLexeme,
   attachTag,
@@ -13,9 +13,11 @@ import {
   updateSense,
 } from './actions';
 import { failureMessage, fieldError } from '@/app/components/action-state';
+import { useDeleteFocusRecovery } from '@/app/components/use-delete-focus-recovery';
 import TagManager from './tag-manager';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
+import { DeleteConfirmDialog } from '@/app/components/ui/delete-confirm-dialog';
 import { FormError } from '@/app/components/ui/form-error';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
@@ -39,7 +41,13 @@ type CompleteLexeme = Lexeme & {
  * single-table write. Fields are controlled so they can be cleared after a
  * successful add (the new entry appears via revalidation).
  */
-function AddLexemeForm({ languageId }: { languageId: string }) {
+function AddLexemeForm({
+  languageId,
+  termInputRef,
+}: {
+  languageId: string;
+  termInputRef: React.RefObject<HTMLInputElement | null>;
+}) {
   const [term, setTerm] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -68,6 +76,7 @@ function AddLexemeForm({ languageId }: { languageId: string }) {
       <div className="flex flex-col gap-1">
         <Label htmlFor="new-term">Term</Label>
         <Input
+          ref={termInputRef}
           id="new-term"
           name="term"
           value={term}
@@ -176,10 +185,12 @@ function SenseEditRow({
   languageId,
   sense,
   deleteLexemePending,
+  fallbackFocusRef,
 }: {
   languageId: string;
   sense: Sense;
   deleteLexemePending: boolean;
+  fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const [pos, setPos] = useState(sense.part_of_speech);
   const [definition, setDefinition] = useState(sense.definition);
@@ -188,18 +199,28 @@ function SenseEditRow({
     updateSense.bind(null, languageId, sense.id),
     null,
   );
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { rowRef, focusOverrideRef, captureFocusTarget } =
+    useDeleteFocusRecovery<HTMLLIElement>(fallbackFocusRef);
+
   const [deleteState, deleteAction, deletePending] = useActionState(
-    deleteSense.bind(null, languageId, sense.id),
+    async (
+      prev: Awaited<ReturnType<typeof deleteSense>> | null,
+      formData: FormData,
+    ) => {
+      captureFocusTarget();
+      const result = await deleteSense(languageId, sense.id, prev, formData);
+      if (result.ok) setDeleteDialogOpen(false);
+      return result;
+    },
     null,
   );
 
-  const error =
-    failureMessage(saveState) ??
-    failureMessage(deleteState) ??
-    fieldError(saveState, 'definition');
+  const error = failureMessage(saveState) ?? fieldError(saveState, 'definition');
 
   return (
-    <li className="flex flex-wrap items-end gap-3">
+    <li ref={rowRef} className="flex flex-wrap items-end gap-3">
       <form
         action={saveAction}
         className="flex flex-wrap items-end gap-3 flex-1"
@@ -231,16 +252,36 @@ function SenseEditRow({
           {savePending ? 'Saving…' : 'Save'}
         </Button>
       </form>
-      <form action={deleteAction}>
-        <Button
-          type="submit"
-          variant="destructive"
-          disabled={savePending || deletePending || deleteLexemePending}
-          className="w-24"
-        >
-          Delete
-        </Button>
-      </form>
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        focusOverrideRef={focusOverrideRef}
+        trigger={
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={savePending || deletePending || deleteLexemePending}
+            data-delete-trigger
+            className="w-24"
+          >
+            Delete
+          </Button>
+        }
+        title="Delete this sense?"
+        description="This removes just this sense (part of speech and definition) from the entry. This can't be undone."
+      >
+        <form action={deleteAction}>
+          <Button
+            type="submit"
+            variant="destructive"
+            disabled={savePending || deletePending || deleteLexemePending}
+            className="w-24"
+          >
+            {deletePending ? 'Deleting…' : 'Delete'}
+          </Button>
+          <FormError message={failureMessage(deleteState)} className="w-full" />
+        </form>
+      </DeleteConfirmDialog>
       <FormError message={error} className="w-full" />
     </li>
   );
@@ -364,32 +405,44 @@ function AttachTagForm({
  * multi-table transaction is needed. `allTags` is the language's full tag
  * inventory (from the page), used to compute which tags are still available
  * to attach.
+ *
+ * `deleteEntry` bundles the single delete-lexeme flow that `LexemeEntry`
+ * owns (it's the one holding the `<tr>` the focus-recovery hook walks
+ * siblings from — see that component) so this card's own "Delete Entry"
+ * control, rendered here in edit mode, uses the exact same dialog/action
+ * instead of a second independent one.
  */
 function LexemeEditCard({
   lexeme,
   allTags,
   close,
+  deleteEntry,
 }: {
   lexeme: CompleteLexeme;
   allTags: Tag[];
   close: () => void;
+  deleteEntry: {
+    dialogOpen: boolean;
+    setDialogOpen: (open: boolean) => void;
+    focusOverrideRef: React.RefObject<HTMLElement | null>;
+    action: (payload: FormData) => void;
+    pending: boolean;
+    state: Awaited<ReturnType<typeof deleteLexeme>> | null;
+  };
 }) {
   const [term, setTerm] = useState(lexeme.term);
   const [notes, setNotes] = useState(lexeme.notes ?? '');
+  // Fallback focus target for sense deletes — distinct from `deleteEntry`,
+  // which needs a target outside this card since the whole card unmounts
+  // when the entry itself is deleted.
+  const senseFallbackFocusRef = useRef<HTMLInputElement>(null);
 
   const [saveState, saveAction, savePending] = useActionState(
     updateLexeme.bind(null, lexeme.language_id, lexeme.id),
     null,
   );
-  const [deleteState, deleteAction, deletePending] = useActionState(
-    deleteLexeme.bind(null, lexeme.language_id, lexeme.id),
-    null,
-  );
 
-  const lexemeError =
-    failureMessage(saveState) ??
-    failureMessage(deleteState) ??
-    fieldError(saveState, 'term');
+  const lexemeError = failureMessage(saveState) ?? fieldError(saveState, 'term');
 
   const availableTags = allTags.filter(
     (tag) => !lexeme.tags.some((t) => t.id === tag.id),
@@ -402,6 +455,7 @@ function LexemeEditCard({
         <div className="flex flex-col gap-1">
           <Label htmlFor={`term-${lexeme.id}`}>Term</Label>
           <Input
+            ref={senseFallbackFocusRef}
             id={`term-${lexeme.id}`}
             name="term"
             value={term}
@@ -420,7 +474,7 @@ function LexemeEditCard({
         </div>
         <Button
           type="submit"
-          disabled={savePending || deletePending}
+          disabled={savePending || deleteEntry.pending}
           className="w-24"
         >
           {savePending ? 'Saving…' : 'Save'}
@@ -438,7 +492,8 @@ function LexemeEditCard({
                 key={sense.id}
                 languageId={lexeme.language_id}
                 sense={sense}
-                deleteLexemePending={deletePending}
+                deleteLexemePending={deleteEntry.pending}
+                fallbackFocusRef={senseFallbackFocusRef}
               />
             ))}
           </ul>
@@ -446,7 +501,7 @@ function LexemeEditCard({
         <AddSenseForm
           languageId={lexeme.language_id}
           lexemeId={lexeme.id}
-          deleteLexemePending={deletePending}
+          deleteLexemePending={deleteEntry.pending}
         />
       </div>
 
@@ -461,7 +516,7 @@ function LexemeEditCard({
                 languageId={lexeme.language_id}
                 lexemeId={lexeme.id}
                 tag={tag}
-                deleteLexemePending={deletePending}
+                deleteLexemePending={deleteEntry.pending}
               />
             ))}
           </div>
@@ -470,27 +525,50 @@ function LexemeEditCard({
           languageId={lexeme.language_id}
           lexemeId={lexeme.id}
           availableTags={availableTags}
-          deleteLexemePending={deletePending}
+          deleteLexemePending={deleteEntry.pending}
         />
       </div>
 
       {/* Entry-level controls */}
       <div className="flex items-center justify-end gap-2 border-t pt-3">
-        <form action={deleteAction}>
-          <Button
-            type="submit"
-            variant="destructive"
-            disabled={savePending || deletePending}
-            className="w-32"
-          >
-            Delete Entry
-          </Button>
-        </form>
+        <DeleteConfirmDialog
+          open={deleteEntry.dialogOpen}
+          onOpenChange={deleteEntry.setDialogOpen}
+          focusOverrideRef={deleteEntry.focusOverrideRef}
+          trigger={
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={savePending || deleteEntry.pending}
+              data-delete-trigger
+              className="w-32"
+            >
+              Delete Entry
+            </Button>
+          }
+          title={`Delete "${lexeme.term}"?`}
+          description="This deletes the dictionary entry, including all of its senses and tag attachments. This can't be undone."
+        >
+          <form action={deleteEntry.action}>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={savePending || deleteEntry.pending}
+              className="w-32"
+            >
+              {deleteEntry.pending ? 'Deleting…' : 'Delete Entry'}
+            </Button>
+            <FormError
+              message={failureMessage(deleteEntry.state)}
+              className="w-full"
+            />
+          </form>
+        </DeleteConfirmDialog>
         <Button
           type="button"
           variant="secondary"
           onClick={close}
-          disabled={savePending || deletePending}
+          disabled={savePending || deleteEntry.pending}
           className="w-24"
         >
           Done
@@ -514,29 +592,58 @@ function LexemeEntry({
   isEven,
   allTags,
   canEdit,
+  fallbackFocusRef,
 }: {
   lexeme: CompleteLexeme;
   isEven: boolean;
   allTags: Tag[];
   canEdit: boolean;
+  fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
 
+  // Shared across both the view-row Delete button below and the "Delete
+  // Entry" button inside `LexemeEditCard` (edit mode) — same entity, same
+  // action, one dialog. `rowRef` attaches to whichever `<tr>` is actually
+  // rendered (view vs. edit), since they're mutually exclusive.
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { rowRef, focusOverrideRef, captureFocusTarget } =
+    useDeleteFocusRecovery<HTMLTableRowElement>(fallbackFocusRef);
+
   const [deleteState, deleteAction, deletePending] = useActionState(
-    deleteLexeme.bind(null, lexeme.language_id, lexeme.id),
+    async (
+      prev: Awaited<ReturnType<typeof deleteLexeme>> | null,
+      formData: FormData,
+    ) => {
+      captureFocusTarget();
+      const result = await deleteLexeme(
+        lexeme.language_id,
+        lexeme.id,
+        prev,
+        formData,
+      );
+      if (result.ok) setDeleteDialogOpen(false);
+      return result;
+    },
     null,
   );
 
-  const deleteError = failureMessage(deleteState);
-
   if (isEditing)
     return (
-      <tr className="border-t">
+      <tr ref={rowRef} className="border-t">
         <td colSpan={6} className="p-4 text-left">
           <LexemeEditCard
             lexeme={lexeme}
             allTags={allTags}
             close={() => setIsEditing(false)}
+            deleteEntry={{
+              dialogOpen: deleteDialogOpen,
+              setDialogOpen: setDeleteDialogOpen,
+              focusOverrideRef,
+              action: deleteAction,
+              pending: deletePending,
+              state: deleteState,
+            }}
           />
         </td>
       </tr>
@@ -549,7 +656,7 @@ function LexemeEntry({
 
   return (
     <>
-      <tr className={'border-t ' + (isEven ? 'bg-card/50' : 'bg-card')}>
+      <tr ref={rowRef} className={'border-t ' + (isEven ? 'bg-card/50' : 'bg-card')}>
         <td rowSpan={lexemeRowSpan} className="py-2 font-mono">
           {lexeme.term}
           {lexeme.fits_phonotactics === false && (
@@ -581,7 +688,7 @@ function LexemeEntry({
         </td>
         <td rowSpan={lexemeRowSpan} className="py-2">
           {canEdit && (
-            <form className="gap-2 flex flex-wrap" action={deleteAction}>
+            <div className="gap-2 flex flex-wrap">
               <Button
                 type="button"
                 variant="edit"
@@ -592,17 +699,42 @@ function LexemeEntry({
               >
                 Edit
               </Button>
-              <Button
-                type="submit"
-                variant="destructive"
-                size="sm"
-                disabled={deletePending}
-                className="w-24"
+              <DeleteConfirmDialog
+                open={deleteDialogOpen}
+                onOpenChange={setDeleteDialogOpen}
+                focusOverrideRef={focusOverrideRef}
+                trigger={
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={deletePending}
+                    data-delete-trigger
+                    className="w-24"
+                  >
+                    Delete
+                  </Button>
+                }
+                title={`Delete "${lexeme.term}"?`}
+                description="This deletes the dictionary entry, including all of its senses and tag attachments. This can't be undone."
               >
-                Delete
-              </Button>
-              <FormError message={deleteError} className="w-full text-left" />
-            </form>
+                <form action={deleteAction}>
+                  <Button
+                    type="submit"
+                    variant="destructive"
+                    size="sm"
+                    disabled={deletePending}
+                    className="w-24"
+                  >
+                    {deletePending ? 'Deleting…' : 'Delete'}
+                  </Button>
+                  <FormError
+                    message={failureMessage(deleteState)}
+                    className="w-full text-left"
+                  />
+                </form>
+              </DeleteConfirmDialog>
+            </div>
           )}
         </td>
       </tr>
@@ -851,9 +983,13 @@ export default function DictionaryTable({
     return filtered.sort(COMPARATORS[sort]);
   }, [dictionary, query, effectiveTagFilter, originFilter, fitFilter, sort]);
 
+  const termInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <div className="flex flex-col gap-4">
-      {canEdit && <AddLexemeForm languageId={languageId} />}
+      {canEdit && (
+        <AddLexemeForm languageId={languageId} termInputRef={termInputRef} />
+      )}
       <TagManager languageId={languageId} tags={allTags} canEdit={canEdit} />
       {dictionary.length === 0 ? (
         <p className="text-muted-foreground">
@@ -890,6 +1026,7 @@ export default function DictionaryTable({
                 dictionary={visible}
                 allTags={allTags}
                 canEdit={canEdit}
+                fallbackFocusRef={termInputRef}
               />
             </>
           )}
@@ -904,10 +1041,12 @@ function LexemeTable({
   dictionary,
   allTags,
   canEdit,
+  fallbackFocusRef,
 }: {
   dictionary: CompleteLexeme[];
   allTags: Tag[];
   canEdit: boolean;
+  fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   return (
     <table className="w-full border table-fixed wrap-break-word">
@@ -941,6 +1080,7 @@ function LexemeTable({
             isEven={i % 2 === 0}
             allTags={allTags}
             canEdit={canEdit}
+            fallbackFocusRef={fallbackFocusRef}
           />
         ))}
       </tbody>

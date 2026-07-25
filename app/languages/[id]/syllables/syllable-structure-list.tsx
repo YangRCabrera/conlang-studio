@@ -2,7 +2,7 @@
 
 import { phonemes, syllable_structures } from '@/app/db/schema';
 import type { PhonemeGroupWithMembers } from '@/app/lib/phoneme-groups';
-import { useActionState, useState } from 'react';
+import { useActionState, useRef, useState } from 'react';
 import {
   createSyllableStructure,
   deleteSyllableStructure,
@@ -11,7 +11,9 @@ import {
 import { templateSchema } from '@/app/db/json-shapes';
 import { z } from 'zod';
 import { anyFieldError, failureMessage } from '@/app/components/action-state';
+import { useDeleteFocusRecovery } from '@/app/components/use-delete-focus-recovery';
 import { Button } from '@/app/components/ui/button';
+import { DeleteConfirmDialog } from '@/app/components/ui/delete-confirm-dialog';
 import { FormError } from '@/app/components/ui/form-error';
 import { Label } from '@/app/components/ui/label';
 
@@ -37,10 +39,12 @@ function AddSyllableStructureForm({
   languageId: languageId,
   phonemes: phonemes,
   groups: groups,
+  toggleButtonRef,
 }: {
   languageId: string;
   phonemes: Phoneme[];
   groups: PhonemeGroupWithMembers[];
+  toggleButtonRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [isAdding, setIsAdding] = useState(false);
 
@@ -78,6 +82,7 @@ function AddSyllableStructureForm({
         </>
       ) : (
         <Button
+          ref={toggleButtonRef}
           type="button"
           disabled={pending}
           onClick={() => setIsAdding(true)}
@@ -97,17 +102,36 @@ function SyllableStructureRow({
   phonemes,
   groups,
   canEdit,
+  fallbackFocusRef,
 }: {
   languageId: string;
   structure: SyllableStructure;
   phonemes: Phoneme[];
   groups: PhonemeGroupWithMembers[];
   canEdit: boolean;
+  fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
 
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { rowRef, focusOverrideRef, captureFocusTarget } =
+    useDeleteFocusRecovery<HTMLLIElement>(fallbackFocusRef);
+
   const [deleteState, deleteAction, deletePending] = useActionState(
-    deleteSyllableStructure.bind(null, languageId, structure.id),
+    async (
+      prev: Awaited<ReturnType<typeof deleteSyllableStructure>> | null,
+      formData: FormData,
+    ) => {
+      captureFocusTarget();
+      const result = await deleteSyllableStructure(
+        languageId,
+        structure.id,
+        prev,
+        formData,
+      );
+      if (result.ok) setDeleteDialogOpen(false);
+      return result;
+    },
     null,
   );
 
@@ -150,7 +174,7 @@ function SyllableStructureRow({
     );
 
   return (
-    <li className="flex flex-col gap-2 rounded-lg border bg-card p-3">
+    <li ref={rowRef} className="flex flex-col gap-2 rounded-lg border bg-card p-3">
       <div className="flex items-center justify-between">
         <div className="flex flex-row mx-3 w-full">
           <p className="flex-2 font-mono">
@@ -175,20 +199,38 @@ function SyllableStructureRow({
             >
               Edit
             </Button>
-            <form action={deleteAction}>
-              <Button
-                type="submit"
-                variant="destructive"
-                disabled={deletePending}
-                className="w-32"
-              >
-                Delete
-              </Button>
-            </form>
+            <DeleteConfirmDialog
+              open={deleteDialogOpen}
+              onOpenChange={setDeleteDialogOpen}
+              focusOverrideRef={focusOverrideRef}
+              trigger={
+                <Button
+                  type="button"
+                  variant="destructive"
+                  data-delete-trigger
+                  className="w-32"
+                >
+                  Delete
+                </Button>
+              }
+              title="Delete this syllable structure?"
+              description="This removes the syllable shape from the language. The word generator will stop drawing from it. This can't be undone."
+            >
+              <form action={deleteAction}>
+                <Button
+                  type="submit"
+                  variant="destructive"
+                  disabled={deletePending}
+                  className="w-32"
+                >
+                  {deletePending ? 'Deleting…' : 'Delete'}
+                </Button>
+                <FormError message={failureMessage(deleteState)} />
+              </form>
+            </DeleteConfirmDialog>
           </div>
         )}
       </div>
-      <FormError message={failureMessage(deleteState)} />
     </li>
   );
 }
@@ -419,6 +461,8 @@ export default function SyllableStructureList({
   structures: SyllableStructure[];
   canEdit: boolean;
 }) {
+  const toggleButtonRef = useRef<HTMLButtonElement>(null);
+
   return (
     <div>
       {canEdit && (
@@ -426,6 +470,7 @@ export default function SyllableStructureList({
           languageId={languageId}
           phonemes={phonemes}
           groups={groups}
+          toggleButtonRef={toggleButtonRef}
         />
       )}
       {initialStructures.length === 0 ? (
@@ -444,6 +489,7 @@ export default function SyllableStructureList({
               groups={groups}
               phonemes={phonemes}
               canEdit={canEdit}
+              fallbackFocusRef={toggleButtonRef}
             />
           ))}
         </ul>

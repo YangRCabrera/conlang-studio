@@ -7,14 +7,16 @@ import {
 import type { RuleContext } from '@/app/db/json-shapes';
 import type { PhonemeGroupWithMembers } from '@/app/lib/phoneme-groups';
 import { formatRule, formatSlot } from '@/app/lib/rule-notation';
-import { useActionState, useMemo, useState } from 'react';
+import { useActionState, useMemo, useRef, useState } from 'react';
 import { createRule, deleteRule, moveRule, updateRule } from './actions';
 import {
   anyFieldError,
   failureMessage,
   type ActionState,
 } from '@/app/components/action-state';
+import { useDeleteFocusRecovery } from '@/app/components/use-delete-focus-recovery';
 import { Button } from '@/app/components/ui/button';
+import { DeleteConfirmDialog } from '@/app/components/ui/delete-confirm-dialog';
 import { FormError } from '@/app/components/ui/form-error';
 import { Label } from '@/app/components/ui/label';
 
@@ -45,12 +47,14 @@ function AddRuleForm({
   groups,
   phonemeSymbolById,
   groupNameById,
+  toggleButtonRef,
 }: {
   languageId: string;
   phonemes: Phoneme[];
   groups: PhonemeGroupWithMembers[];
   phonemeSymbolById: Map<string, string>;
   groupNameById: Map<string, string>;
+  toggleButtonRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [isAdding, setIsAdding] = useState(false);
 
@@ -96,6 +100,7 @@ function AddRuleForm({
         />
       ) : (
         <Button
+          ref={toggleButtonRef}
           type="button"
           disabled={pending}
           onClick={() => setIsAdding(true)}
@@ -123,6 +128,7 @@ function RuleRow({
   phonemeSymbolById,
   groupNameById,
   canEdit,
+  fallbackFocusRef,
 }: {
   languageId: string;
   rule: Rule;
@@ -133,6 +139,7 @@ function RuleRow({
   phonemeSymbolById: Map<string, string>;
   groupNameById: Map<string, string>;
   canEdit: boolean;
+  fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
 
@@ -144,15 +151,26 @@ function RuleRow({
     moveRule.bind(null, languageId, rule.id, 'down'),
     null,
   );
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { rowRef, focusOverrideRef, captureFocusTarget } =
+    useDeleteFocusRecovery<HTMLLIElement>(fallbackFocusRef);
+
   const [deleteState, deleteAction, deletePending] = useActionState(
-    deleteRule.bind(null, languageId, rule.id),
+    async (
+      prev: Awaited<ReturnType<typeof deleteRule>> | null,
+      formData: FormData,
+    ) => {
+      captureFocusTarget();
+      const result = await deleteRule(languageId, rule.id, prev, formData);
+      if (result.ok) setDeleteDialogOpen(false);
+      return result;
+    },
     null,
   );
 
   const rowError =
-    formErrorMessage(deleteState) ??
-    formErrorMessage(moveUpState) ??
-    formErrorMessage(moveDownState);
+    formErrorMessage(moveUpState) ?? formErrorMessage(moveDownState);
   // Wrapped (rather than plain-bound) so the row can leave edit mode on
   // success from the event, avoiding a setState-in-effect.
   const [editState, editAction, editPending] = useActionState(
@@ -192,7 +210,10 @@ function RuleRow({
     );
 
   return (
-    <li className="flex items-center gap-2 rounded-lg border bg-card p-3 justify-between">
+    <li
+      ref={rowRef}
+      className="flex items-center gap-2 rounded-lg border bg-card p-3 justify-between"
+    >
       <div className="flex items-center gap-3 mx-3 w-full">
         {canEdit && (
           <div className="flex flex-col">
@@ -234,16 +255,36 @@ function RuleRow({
           >
             Edit
           </Button>
-          <form action={deleteAction}>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={busy}
-              className="w-32"
-            >
-              Delete
-            </Button>
-          </form>
+          <DeleteConfirmDialog
+            open={deleteDialogOpen}
+            onOpenChange={setDeleteDialogOpen}
+            focusOverrideRef={focusOverrideRef}
+            trigger={
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={busy}
+                data-delete-trigger
+                className="w-32"
+              >
+                Delete
+              </Button>
+            }
+            title="Delete this rule?"
+            description="This removes the rewrite rule. It no longer applies when generating words. This can't be undone."
+          >
+            <form action={deleteAction}>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={busy}
+                className="w-32"
+              >
+                {deletePending ? 'Deleting…' : 'Delete'}
+              </Button>
+              <FormError message={formErrorMessage(deleteState)} />
+            </form>
+          </DeleteConfirmDialog>
         </div>
       )}
     </li>
@@ -628,6 +669,8 @@ export default function RuleList({
     [groups],
   );
 
+  const toggleButtonRef = useRef<HTMLButtonElement>(null);
+
   return (
     <div>
       {canEdit && (
@@ -637,6 +680,7 @@ export default function RuleList({
           groups={groups}
           phonemeSymbolById={phonemeSymbolById}
           groupNameById={groupNameById}
+          toggleButtonRef={toggleButtonRef}
         />
       )}
       {rules.length === 0 ? (
@@ -659,6 +703,7 @@ export default function RuleList({
                 phonemeSymbolById={phonemeSymbolById}
                 groupNameById={groupNameById}
                 canEdit={canEdit}
+                fallbackFocusRef={toggleButtonRef}
               />
             ))}
           </ul>

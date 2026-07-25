@@ -6,6 +6,7 @@ import { useActionState, useRef, useState } from 'react';
 import { createGroup, deleteGroup, updateGroup } from './actions';
 import { anyFieldError, failureMessage } from '@/app/components/action-state';
 import { useDeleteFocusRecovery } from '@/app/components/use-delete-focus-recovery';
+import { useReturnFocusOnExit } from '@/app/components/use-return-focus-on-exit';
 import { Button } from '@/app/components/ui/button';
 import { DeleteConfirmDialog } from '@/app/components/ui/delete-confirm-dialog';
 import { FormError } from '@/app/components/ui/form-error';
@@ -135,6 +136,8 @@ function GroupRow({
   fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const editTriggerRef = useRef<HTMLButtonElement>(null);
+  useReturnFocusOnExit(isEditing, editTriggerRef);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const { rowRef, focusOverrideRef, captureFocusTarget } =
@@ -202,6 +205,7 @@ function GroupRow({
         {canEdit && (
           <>
             <Button
+              ref={editTriggerRef}
               type="button"
               variant="edit"
               disabled={deletePending}

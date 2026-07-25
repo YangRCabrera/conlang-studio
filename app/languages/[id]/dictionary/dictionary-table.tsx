@@ -14,6 +14,8 @@ import {
 } from './actions';
 import { failureMessage, fieldError } from '@/app/components/action-state';
 import { useDeleteFocusRecovery } from '@/app/components/use-delete-focus-recovery';
+import { useFocusOnError } from '@/app/components/use-focus-on-error';
+import { useReturnFocusOnExit } from '@/app/components/use-return-focus-on-exit';
 import TagManager from './tag-manager';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
@@ -70,6 +72,7 @@ function AddLexemeForm({
   );
 
   const error = failureMessage(state) ?? fieldError(state, 'term');
+  useFocusOnError(error, termInputRef);
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
@@ -119,6 +122,7 @@ function AddSenseForm({
 }) {
   const [pos, setPos] = useState('');
   const [definition, setDefinition] = useState('');
+  const definitionInputRef = useRef<HTMLInputElement>(null);
 
   // Wraps the action rather than binding it so the fields can be cleared on
   // success right here in the transition — a `useEffect` watching the result
@@ -144,6 +148,7 @@ function AddSenseForm({
   );
 
   const error = failureMessage(state) ?? fieldError(state, 'definition');
+  useFocusOnError(error, definitionInputRef);
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
@@ -160,6 +165,7 @@ function AddSenseForm({
       <div className="flex flex-col gap-1 flex-1 min-w-48">
         <Label htmlFor={`new-definition-${lexemeId}`}>Definition</Label>
         <Input
+          ref={definitionInputRef}
           id={`new-definition-${lexemeId}`}
           name="definition"
           value={definition}
@@ -202,6 +208,7 @@ function SenseEditRow({
 }) {
   const [pos, setPos] = useState(sense.part_of_speech);
   const [definition, setDefinition] = useState(sense.definition);
+  const definitionInputRef = useRef<HTMLInputElement>(null);
 
   const [saveState, saveAction, savePending] = useActionState(
     updateSense.bind(null, languageId, sense.id),
@@ -226,6 +233,7 @@ function SenseEditRow({
   );
 
   const error = failureMessage(saveState) ?? fieldError(saveState, 'definition');
+  useFocusOnError(error, definitionInputRef);
 
   return (
     <li ref={rowRef} className="flex flex-wrap items-end gap-3">
@@ -246,6 +254,7 @@ function SenseEditRow({
         <div className="flex flex-col gap-1 flex-1 min-w-48">
           <Label htmlFor={`definition-${sense.id}`}>Definition</Label>
           <Input
+            ref={definitionInputRef}
             id={`definition-${sense.id}`}
             name="definition"
             value={definition}
@@ -457,6 +466,7 @@ function LexemeEditCard({
   );
 
   const lexemeError = failureMessage(saveState) ?? fieldError(saveState, 'term');
+  useFocusOnError(lexemeError, senseFallbackFocusRef);
 
   const availableTags = allTags.filter(
     (tag) => !lexeme.tags.some((t) => t.id === tag.id),
@@ -621,6 +631,8 @@ function LexemeEntry({
   fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const editTriggerRef = useRef<HTMLButtonElement>(null);
+  useReturnFocusOnExit(isEditing, editTriggerRef);
 
   // Shared across both the view-row Delete button below and the "Delete
   // Entry" button inside `LexemeEditCard` (edit mode) — same entity, same
@@ -710,6 +722,7 @@ function LexemeEntry({
           {canEdit && (
             <div className="gap-2 flex flex-wrap">
               <Button
+                ref={editTriggerRef}
                 type="button"
                 variant="edit"
                 size="sm"

@@ -5,6 +5,7 @@ import { useActionState, useRef, useState } from 'react';
 import { createTag, deleteTag, renameTag } from './actions';
 import { failureMessage, fieldError } from '@/app/components/action-state';
 import { useDeleteFocusRecovery } from '@/app/components/use-delete-focus-recovery';
+import { useFocusOnError } from '@/app/components/use-focus-on-error';
 import { Button } from '@/app/components/ui/button';
 import { DeleteConfirmDialog } from '@/app/components/ui/delete-confirm-dialog';
 import { FormError } from '@/app/components/ui/form-error';
@@ -39,6 +40,7 @@ function AddTagForm({
   );
 
   const error = failureMessage(state) ?? fieldError(state, 'name');
+  useFocusOnError(error, nameInputRef);
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
@@ -76,6 +78,7 @@ function TagRow({
   fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const [name, setName] = useState(tag.name);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const [renameState, renameAction, renamePending] = useActionState(
     renameTag.bind(null, languageId, tag.id),
@@ -100,6 +103,7 @@ function TagRow({
   );
 
   const error = failureMessage(renameState) ?? fieldError(renameState, 'name');
+  useFocusOnError(error, nameInputRef);
 
   if (!canEdit) return <li className="flex items-center">{tag.name}</li>;
 
@@ -109,6 +113,7 @@ function TagRow({
         <div className="flex flex-col gap-1 flex-1 min-w-40">
           <Label htmlFor={`tag-name-${tag.id}`}>Name</Label>
           <Input
+            ref={nameInputRef}
             id={`tag-name-${tag.id}`}
             name="name"
             value={name}

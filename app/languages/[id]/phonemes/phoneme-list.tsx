@@ -5,6 +5,7 @@ import { createPhoneme, updatePhoneme, deletePhoneme } from './actions';
 import type { phonemes } from '@/app/db/schema';
 import { anyFieldError, failureMessage } from '@/app/components/action-state';
 import { useDeleteFocusRecovery } from '@/app/components/use-delete-focus-recovery';
+import { useReturnFocusOnExit } from '@/app/components/use-return-focus-on-exit';
 import { Button } from '@/app/components/ui/button';
 import { DeleteConfirmDialog } from '@/app/components/ui/delete-confirm-dialog';
 import { FormError } from '@/app/components/ui/form-error';
@@ -26,6 +27,8 @@ function PhonemeRow({
   fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const editTriggerRef = useRef<HTMLButtonElement>(null);
+  useReturnFocusOnExit(isEditing, editTriggerRef);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const { rowRef, focusOverrideRef, captureFocusTarget } =
@@ -37,7 +40,12 @@ function PhonemeRow({
       formData: FormData,
     ) => {
       captureFocusTarget();
-      const result = await deletePhoneme(languageId, phoneme.id, prev, formData);
+      const result = await deletePhoneme(
+        languageId,
+        phoneme.id,
+        prev,
+        formData,
+      );
       if (result.ok) setDeleteDialogOpen(false);
       return result;
     },
@@ -81,7 +89,10 @@ function PhonemeRow({
   }
 
   return (
-    <li ref={rowRef} className="flex flex-col gap-2 rounded-lg border bg-card p-3">
+    <li
+      ref={rowRef}
+      className="flex flex-col gap-2 rounded-lg border bg-card p-3"
+    >
       <div className="flex items-center gap-2">
         <span className="flex-1 font-mono text-lg px-3">
           {'Symbol: ' + phoneme.symbol}
@@ -95,6 +106,7 @@ function PhonemeRow({
         {canEdit && (
           <>
             <Button
+              ref={editTriggerRef}
               type="button"
               variant="edit"
               onClick={() => setIsEditing(true)}
@@ -261,7 +273,10 @@ export default function PhonemeList({
   return (
     <div>
       {canEdit && (
-        <AddPhonemeForm languageId={languageId} symbolInputRef={symbolInputRef} />
+        <AddPhonemeForm
+          languageId={languageId}
+          symbolInputRef={symbolInputRef}
+        />
       )}
       {initialPhonemes.length === 0 ? (
         <p className="text-muted-foreground">

@@ -6,6 +6,8 @@ import { createLanguage, updateLanguage, deleteLanguage } from './actions';
 import type { languages } from '@/app/db/schema';
 import { failureMessage, fieldError } from '@/app/components/action-state';
 import { useDeleteFocusRecovery } from '@/app/components/use-delete-focus-recovery';
+import { useFocusOnError } from '@/app/components/use-focus-on-error';
+import { useReturnFocusOnExit } from '@/app/components/use-return-focus-on-exit';
 import { Button } from '@/app/components/ui/button';
 import { DeleteConfirmDialog } from '@/app/components/ui/delete-confirm-dialog';
 import { FormError } from '@/app/components/ui/form-error';
@@ -30,6 +32,9 @@ function LanguageItem({
     Awaited<ReturnType<typeof updateLanguage>> | null
   >(null);
   const [renamePending, startTransition] = useTransition();
+  const renameTriggerRef = useRef<HTMLButtonElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  useReturnFocusOnExit(isEditing, renameTriggerRef);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const { rowRef, focusOverrideRef, captureFocusTarget } =
@@ -66,12 +71,14 @@ function LanguageItem({
 
   const renameError =
     failureMessage(renameState) ?? fieldError(renameState, 'name');
+  useFocusOnError(renameError, renameInputRef, renamePending);
 
   return (
     <li ref={rowRef} className="flex flex-col gap-1 rounded-lg border bg-card p-3">
       <div className="flex items-center gap-2">
         {isEditing ? (
           <Input
+            ref={renameInputRef}
             autoFocus
             id={`rename-name-${lang.id}`}
             value={editName}
@@ -97,6 +104,7 @@ function LanguageItem({
           </Link>
         )}
         <Button
+          ref={renameTriggerRef}
           type="button"
           variant="ghost"
           size="sm"
@@ -159,6 +167,7 @@ export default function LanguageList({
   const createInputRef = useRef<HTMLInputElement>(null);
   const createError =
     failureMessage(createState) ?? fieldError(createState, 'name');
+  useFocusOnError(createError, createInputRef);
 
   return (
     <div>

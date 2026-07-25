@@ -15,6 +15,7 @@ import {
   type ActionState,
 } from '@/app/components/action-state';
 import { useDeleteFocusRecovery } from '@/app/components/use-delete-focus-recovery';
+import { useReturnFocusOnExit } from '@/app/components/use-return-focus-on-exit';
 import { Button } from '@/app/components/ui/button';
 import { DeleteConfirmDialog } from '@/app/components/ui/delete-confirm-dialog';
 import { FormError } from '@/app/components/ui/form-error';
@@ -57,6 +58,7 @@ function AddRuleForm({
   toggleButtonRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [isAdding, setIsAdding] = useState(false);
+  useReturnFocusOnExit(isAdding, toggleButtonRef);
 
   // The action is wrapped (rather than plain-bound) so the form can close
   // itself on success from the event, avoiding a setState-in-effect.
@@ -142,6 +144,8 @@ function RuleRow({
   fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const editTriggerRef = useRef<HTMLButtonElement>(null);
+  useReturnFocusOnExit(isEditing, editTriggerRef);
 
   const [moveUpState, moveUpAction, moveUpPending] = useActionState(
     moveRule.bind(null, languageId, rule.id, 'up'),
@@ -247,6 +251,7 @@ function RuleRow({
       {canEdit && (
         <div className="flex gap-2">
           <Button
+            ref={editTriggerRef}
             type="button"
             variant="edit"
             onClick={() => setIsEditing(true)}

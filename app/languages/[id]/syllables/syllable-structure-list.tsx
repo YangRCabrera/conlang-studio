@@ -12,6 +12,7 @@ import { templateSchema } from '@/app/db/json-shapes';
 import { z } from 'zod';
 import { anyFieldError, failureMessage } from '@/app/components/action-state';
 import { useDeleteFocusRecovery } from '@/app/components/use-delete-focus-recovery';
+import { useReturnFocusOnExit } from '@/app/components/use-return-focus-on-exit';
 import { Button } from '@/app/components/ui/button';
 import { DeleteConfirmDialog } from '@/app/components/ui/delete-confirm-dialog';
 import { FormError } from '@/app/components/ui/form-error';
@@ -47,6 +48,7 @@ function AddSyllableStructureForm({
   toggleButtonRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [isAdding, setIsAdding] = useState(false);
+  useReturnFocusOnExit(isAdding, toggleButtonRef);
 
   // Wrapped (rather than plain-bound) so the form can close itself on
   // success from the event, avoiding a setState-in-effect.
@@ -112,6 +114,8 @@ function SyllableStructureRow({
   fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const editTriggerRef = useRef<HTMLButtonElement>(null);
+  useReturnFocusOnExit(isEditing, editTriggerRef);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const { rowRef, focusOverrideRef, captureFocusTarget } =
@@ -191,6 +195,7 @@ function SyllableStructureRow({
         {canEdit && (
           <div className="flex gap-2">
             <Button
+              ref={editTriggerRef}
               type="button"
               variant="edit"
               onClick={() => setIsEditing(true)}

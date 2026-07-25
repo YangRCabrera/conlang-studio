@@ -77,13 +77,16 @@ function AddLexemeForm({
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
       <div className="flex flex-col gap-1">
-        <Label htmlFor="new-term">Term</Label>
+        <Label htmlFor="new-term" required>
+          Term
+        </Label>
         <Input
           ref={termInputRef}
           id="new-term"
           name="term"
           value={term}
           onChange={(e) => setTerm(e.target.value)}
+          required
           aria-invalid={!!error}
           aria-describedby={error ? 'new-term-error' : undefined}
           className="font-mono w-40"
@@ -153,23 +156,29 @@ function AddSenseForm({
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
       <div className="flex flex-col gap-1">
-        <Label htmlFor={`new-pos-${lexemeId}`}>Part of speech</Label>
+        <Label htmlFor={`new-pos-${lexemeId}`} required>
+          Part of speech
+        </Label>
         <Input
           id={`new-pos-${lexemeId}`}
           name="part_of_speech"
           value={pos}
           onChange={(e) => setPos(e.target.value)}
+          required
           className="w-40"
         />
       </div>
       <div className="flex flex-col gap-1 flex-1 min-w-48">
-        <Label htmlFor={`new-definition-${lexemeId}`}>Definition</Label>
+        <Label htmlFor={`new-definition-${lexemeId}`} required>
+          Definition
+        </Label>
         <Input
           ref={definitionInputRef}
           id={`new-definition-${lexemeId}`}
           name="definition"
           value={definition}
           onChange={(e) => setDefinition(e.target.value)}
+          required
           aria-invalid={!!error}
           aria-describedby={error ? `new-definition-${lexemeId}-error` : undefined}
         />
@@ -242,23 +251,29 @@ function SenseEditRow({
         className="flex flex-wrap items-end gap-3 flex-1"
       >
         <div className="flex flex-col gap-1">
-          <Label htmlFor={`pos-${sense.id}`}>Part of speech</Label>
+          <Label htmlFor={`pos-${sense.id}`} required>
+            Part of speech
+          </Label>
           <Input
             id={`pos-${sense.id}`}
             name="part_of_speech"
             value={pos}
             onChange={(e) => setPos(e.target.value)}
+            required
             className="w-40"
           />
         </div>
         <div className="flex flex-col gap-1 flex-1 min-w-48">
-          <Label htmlFor={`definition-${sense.id}`}>Definition</Label>
+          <Label htmlFor={`definition-${sense.id}`} required>
+            Definition
+          </Label>
           <Input
             ref={definitionInputRef}
             id={`definition-${sense.id}`}
             name="definition"
             value={definition}
             onChange={(e) => setDefinition(e.target.value)}
+            required
             aria-invalid={!!error}
             aria-describedby={error ? `definition-${sense.id}-error` : undefined}
           />
@@ -389,7 +404,9 @@ function AttachTagForm({
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
       <div className="flex flex-col gap-1">
-        <Label htmlFor={`attach-tag-${lexemeId}`}>Add tag</Label>
+        <Label htmlFor={`attach-tag-${lexemeId}`} required>
+          Add tag
+        </Label>
         <select
           id={`attach-tag-${lexemeId}`}
           name="tag_id"
@@ -477,13 +494,16 @@ function LexemeEditCard({
       {/* Lexeme fields */}
       <form action={saveAction} className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
-          <Label htmlFor={`term-${lexeme.id}`}>Term</Label>
+          <Label htmlFor={`term-${lexeme.id}`} required>
+            Term
+          </Label>
           <Input
             ref={senseFallbackFocusRef}
             id={`term-${lexeme.id}`}
             name="term"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
+            required
             aria-invalid={!!lexemeError}
             aria-describedby={lexemeError ? `term-${lexeme.id}-error` : undefined}
             className="font-mono w-40"

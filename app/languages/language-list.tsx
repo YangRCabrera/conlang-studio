@@ -12,6 +12,7 @@ import { Button } from '@/app/components/ui/button';
 import { DeleteConfirmDialog } from '@/app/components/ui/delete-confirm-dialog';
 import { FormError } from '@/app/components/ui/form-error';
 import { Input } from '@/app/components/ui/input';
+import { Label } from '@/app/components/ui/label';
 
 type Language = typeof languages.$inferSelect;
 
@@ -80,29 +81,35 @@ function LanguageItem({
     >
       <div className="flex items-center gap-2">
         {isEditing ? (
-          <Input
-            ref={renameInputRef}
-            // Deliberate: this reveals in response to clicking "Rename", not
-            // on page load, so the disorientation `no-autofocus` guards
-            // against doesn't apply — the user just asked for an editable
-            // field and expects focus to land in it immediately.
-            // eslint-disable-next-line jsx-a11y/no-autofocus
-            autoFocus
-            id={`rename-name-${lang.id}`}
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commitRename();
-              if (e.key === 'Escape') setIsEditing(false);
-            }}
-            onBlur={commitRename}
-            disabled={renamePending}
-            aria-invalid={!!renameError}
-            aria-describedby={
-              renameError ? `rename-name-${lang.id}-error` : undefined
-            }
-            className="flex-1 h-8"
-          />
+          <>
+            <Label htmlFor={`rename-name-${lang.id}`} className="sr-only">
+              Language name
+            </Label>
+            <Input
+              ref={renameInputRef}
+              // Deliberate: this reveals in response to clicking "Rename", not
+              // on page load, so the disorientation `no-autofocus` guards
+              // against doesn't apply — the user just asked for an editable
+              // field and expects focus to land in it immediately.
+              // eslint-disable-next-line jsx-a11y/no-autofocus
+              autoFocus
+              id={`rename-name-${lang.id}`}
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename();
+                if (e.key === 'Escape') setIsEditing(false);
+              }}
+              onBlur={commitRename}
+              disabled={renamePending}
+              required
+              aria-invalid={!!renameError}
+              aria-describedby={
+                renameError ? `rename-name-${lang.id}-error` : undefined
+              }
+              className="flex-1 h-8"
+            />
+          </>
         ) : (
           <Link
             href={`/languages/${lang.id}`}
@@ -180,22 +187,26 @@ export default function LanguageList({
   return (
     <div>
       <form action={createAction} className="flex flex-col gap-2 mb-6">
-        <div className="flex gap-2">
-          <Input
-            ref={createInputRef}
-            id="new-language-name"
-            name="name"
-            placeholder="New language name"
-            required
-            aria-invalid={!!createError}
-            aria-describedby={
-              createError ? 'new-language-name-error' : undefined
-            }
-            className="flex-1"
-          />
-          <Button type="submit" disabled={createPending}>
-            Create
-          </Button>
+        <div className="flex flex-col gap-1 flex-1">
+          <Label htmlFor="new-language-name" required>
+            New language name
+          </Label>
+          <div className="flex gap-2">
+            <Input
+              ref={createInputRef}
+              id="new-language-name"
+              name="name"
+              required
+              aria-invalid={!!createError}
+              aria-describedby={
+                createError ? 'new-language-name-error' : undefined
+              }
+              className="flex-1"
+            />
+            <Button type="submit" disabled={createPending}>
+              Create
+            </Button>
+          </div>
         </div>
         <FormError id="new-language-name-error" message={createError} />
       </form>

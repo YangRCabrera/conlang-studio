@@ -45,13 +45,16 @@ function AddTagForm({
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
       <div className="flex flex-col gap-1">
-        <Label htmlFor="new-tag-name">New tag</Label>
+        <Label htmlFor="new-tag-name" required>
+          New tag
+        </Label>
         <Input
           ref={nameInputRef}
           id="new-tag-name"
           name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          required
           aria-invalid={!!error}
           aria-describedby={error ? 'new-tag-name-error' : undefined}
           className="w-48"
@@ -111,13 +114,16 @@ function TagRow({
     <li ref={rowRef} className="flex flex-wrap items-end gap-3">
       <form action={renameAction} className="flex items-end gap-2 flex-1">
         <div className="flex flex-col gap-1 flex-1 min-w-40">
-          <Label htmlFor={`tag-name-${tag.id}`}>Name</Label>
+          <Label htmlFor={`tag-name-${tag.id}`} required>
+            Name
+          </Label>
           <Input
             ref={nameInputRef}
             id={`tag-name-${tag.id}`}
             name="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            required
             aria-invalid={!!error}
             aria-describedby={error ? `tag-name-${tag.id}-error` : undefined}
           />

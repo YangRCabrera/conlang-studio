@@ -208,7 +208,9 @@ function PhonemeForm({
     <form action={formAction} className="flex flex-col gap-2">
       <div className="flex items-end gap-2 px-2">
         <div className="flex flex-col gap-1">
-          <Label htmlFor="new-symbol">Symbol</Label>
+          <Label htmlFor="new-symbol" required>
+            Symbol
+          </Label>
           <Input
             ref={props.mode === 'Add' ? props.symbolInputRef : undefined}
             name="symbol"

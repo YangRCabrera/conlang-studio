@@ -35,7 +35,9 @@ function AddGroupForm({
     <form action={createAction} className="flex flex-col gap-2 mb-6">
       <div className="flex items-end gap-2 px-2">
         <div className="flex flex-col gap-1 flex-1">
-          <Label htmlFor="new-group">New Group</Label>
+          <Label htmlFor="new-group" required>
+            New Group
+          </Label>
           <Input
             ref={nameInputRef}
             name="name"
@@ -78,10 +80,13 @@ function EditGroupForm({
       {group.members.map((m) => (
         <input key={m.id} type="hidden" name="current_member_id" value={m.id} />
       ))}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={`edit-group-name-${group.id}`} required>
+          Name
+        </Label>
         <Input
+          id={`edit-group-name-${group.id}`}
           name="name"
-          placeholder="Name *"
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
           required

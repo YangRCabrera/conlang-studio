@@ -206,23 +206,29 @@ function PhonemeForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      <div className="flex items-center gap-2 px-2">
-        <Input
-          ref={props.mode === 'Add' ? props.symbolInputRef : undefined}
-          name="symbol"
-          placeholder="Symbol *"
-          value={symbol}
-          onChange={(e) => setSymbol(e.currentTarget.value)}
-          required
-          className="w-40 font-mono text-lg text-center"
-        />
-        <Input
-          name="ipa"
-          placeholder="IPA"
-          value={ipa || ''}
-          onChange={(e) => setIPA(e.currentTarget.value)}
-          className="w-40 font-mono text-lg text-center"
-        />
+      <div className="flex items-end gap-2 px-2">
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="new-symbol">Symbol</Label>
+          <Input
+            ref={props.mode === 'Add' ? props.symbolInputRef : undefined}
+            name="symbol"
+            id="new-symbol"
+            value={symbol}
+            onChange={(e) => setSymbol(e.currentTarget.value)}
+            required
+            className="w-40 font-mono text-lg text-center"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="new-ipa">IPA</Label>
+          <Input
+            name="ipa"
+            id="new-ipa"
+            value={ipa || ''}
+            onChange={(e) => setIPA(e.currentTarget.value)}
+            className="w-40 font-mono text-lg text-center"
+          />
+        </div>
         <div className="flex flex-1 flex-col items-center px-5">
           <input
             id={weightId}

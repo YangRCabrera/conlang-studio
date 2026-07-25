@@ -33,14 +33,17 @@ function AddGroupForm({
 
   return (
     <form action={createAction} className="flex flex-col gap-2 mb-6">
-      <div className="flex items-center gap-2 px-2">
-        <Input
-          ref={nameInputRef}
-          name="name"
-          placeholder="New Group"
-          required
-          className="flex-1 font-mono text-lg"
-        />
+      <div className="flex items-end gap-2 px-2">
+        <div className="flex flex-col gap-1 flex-1">
+          <Label htmlFor="new-group">New Group</Label>
+          <Input
+            ref={nameInputRef}
+            name="name"
+            id="new-group"
+            required
+            className="font-mono text-lg text-center"
+          />
+        </div>
         <Button type="submit" disabled={createPending} className="w-32">
           Add
         </Button>
@@ -188,7 +191,10 @@ function GroupRow({
   }
 
   return (
-    <li ref={rowRef} className="flex flex-col gap-2 rounded-lg border bg-card p-3">
+    <li
+      ref={rowRef}
+      className="flex flex-col gap-2 rounded-lg border bg-card p-3"
+    >
       <div className="flex flex-row items-center gap-2">
         <div className="flex-1 flex flex-row">
           <p className="w-1/4">

@@ -45,7 +45,11 @@ export default async function Home() {
 
   return (
     <div className="flex flex-col flex-1 items-center">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center gap-12 py-18 px-6">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="flex flex-1 w-full max-w-3xl flex-col items-center gap-12 py-18 px-6"
+      >
         <div className="flex flex-col gap-4 items-center text-center">
           <h1 className="text-4xl font-bold">
             Design constructed languages, end to end.

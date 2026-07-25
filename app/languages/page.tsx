@@ -15,7 +15,11 @@ export default async function LanguagesPage() {
 
   return (
     <div className="flex flex-col flex-1 items-center">
-      <main className="flex flex-1 w-full max-w-3xl flex-col gap-5 py-10 px-20 items-stretch">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="flex flex-1 w-full max-w-3xl flex-col gap-5 py-10 px-20 items-stretch"
+      >
         <h1 className="text-2xl font-bold mb-6 text-center">My Languages</h1>
         <LanguageList languages={langs} />
       </main>

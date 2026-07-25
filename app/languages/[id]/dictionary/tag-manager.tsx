@@ -1,10 +1,13 @@
 'use client';
 
 import { tags } from '@/app/db/schema';
-import { useActionState, useState } from 'react';
+import { useActionState, useRef, useState } from 'react';
 import { createTag, deleteTag, renameTag } from './actions';
 import { failureMessage, fieldError } from '@/app/components/action-state';
+import { useDeleteFocusRecovery } from '@/app/components/use-delete-focus-recovery';
+import { useFocusOnError } from '@/app/components/use-focus-on-error';
 import { Button } from '@/app/components/ui/button';
+import { DeleteConfirmDialog } from '@/app/components/ui/delete-confirm-dialog';
 import { FormError } from '@/app/components/ui/form-error';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
@@ -15,7 +18,13 @@ type Tag = typeof tags.$inferSelect;
  * Form for creating a new tag. Controlled so the input can be cleared after a
  * successful add (the new tag appears via revalidation).
  */
-function AddTagForm({ languageId }: { languageId: string }) {
+function AddTagForm({
+  languageId,
+  nameInputRef,
+}: {
+  languageId: string;
+  nameInputRef: React.RefObject<HTMLInputElement | null>;
+}) {
   const [name, setName] = useState('');
 
   const [state, formAction, pending] = useActionState(
@@ -31,23 +40,30 @@ function AddTagForm({ languageId }: { languageId: string }) {
   );
 
   const error = failureMessage(state) ?? fieldError(state, 'name');
+  useFocusOnError(error, nameInputRef);
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
       <div className="flex flex-col gap-1">
-        <Label htmlFor="new-tag-name">New tag</Label>
+        <Label htmlFor="new-tag-name" required>
+          New tag
+        </Label>
         <Input
+          ref={nameInputRef}
           id="new-tag-name"
           name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          required
+          aria-invalid={!!error}
+          aria-describedby={error ? 'new-tag-name-error' : undefined}
           className="w-48"
         />
       </div>
       <Button type="submit" disabled={pending} className="w-24">
         {pending ? 'Adding…' : 'Add Tag'}
       </Button>
-      <FormError message={error} className="w-full" />
+      <FormError id="new-tag-name-error" message={error} className="w-full" />
     </form>
   );
 }
@@ -57,39 +73,59 @@ function TagRow({
   languageId,
   tag,
   canEdit,
+  fallbackFocusRef,
 }: {
   languageId: string;
   tag: Tag;
   canEdit: boolean;
+  fallbackFocusRef: React.RefObject<HTMLElement | null>;
 }) {
   const [name, setName] = useState(tag.name);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const [renameState, renameAction, renamePending] = useActionState(
     renameTag.bind(null, languageId, tag.id),
     null,
   );
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { rowRef, focusOverrideRef, captureFocusTarget } =
+    useDeleteFocusRecovery<HTMLLIElement>(fallbackFocusRef);
+
   const [deleteState, deleteAction, deletePending] = useActionState(
-    deleteTag.bind(null, languageId, tag.id),
+    async (
+      prev: Awaited<ReturnType<typeof deleteTag>> | null,
+      formData: FormData,
+    ) => {
+      captureFocusTarget();
+      const result = await deleteTag(languageId, tag.id, prev, formData);
+      if (result.ok) setDeleteDialogOpen(false);
+      return result;
+    },
     null,
   );
 
-  const error =
-    failureMessage(renameState) ??
-    failureMessage(deleteState) ??
-    fieldError(renameState, 'name');
+  const error = failureMessage(renameState) ?? fieldError(renameState, 'name');
+  useFocusOnError(error, nameInputRef);
 
   if (!canEdit) return <li className="flex items-center">{tag.name}</li>;
 
   return (
-    <li className="flex flex-wrap items-end gap-3">
+    <li ref={rowRef} className="flex flex-wrap items-end gap-3">
       <form action={renameAction} className="flex items-end gap-2 flex-1">
         <div className="flex flex-col gap-1 flex-1 min-w-40">
-          <Label htmlFor={`tag-name-${tag.id}`}>Name</Label>
+          <Label htmlFor={`tag-name-${tag.id}`} required>
+            Name
+          </Label>
           <Input
+            ref={nameInputRef}
             id={`tag-name-${tag.id}`}
             name="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            required
+            aria-invalid={!!error}
+            aria-describedby={error ? `tag-name-${tag.id}-error` : undefined}
           />
         </div>
         <Button
@@ -100,17 +136,41 @@ function TagRow({
           {renamePending ? 'Saving…' : 'Save'}
         </Button>
       </form>
-      <form action={deleteAction}>
-        <Button
-          type="submit"
-          variant="destructive"
-          disabled={renamePending || deletePending}
-          className="w-24"
-        >
-          Delete
-        </Button>
-      </form>
-      <FormError message={error} className="w-full" />
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        focusOverrideRef={focusOverrideRef}
+        trigger={
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={renamePending || deletePending}
+            data-delete-trigger
+            className="w-24"
+          >
+            Delete
+          </Button>
+        }
+        title={`Delete tag "${tag.name}"?`}
+        description="This removes the tag entirely, including from every dictionary entry it's attached to. This can't be undone."
+      >
+        <form action={deleteAction}>
+          <Button
+            type="submit"
+            variant="destructive"
+            disabled={renamePending || deletePending}
+            className="w-24"
+          >
+            {deletePending ? 'Deleting…' : 'Delete'}
+          </Button>
+          <FormError message={failureMessage(deleteState)} className="w-full" />
+        </form>
+      </DeleteConfirmDialog>
+      <FormError
+        id={`tag-name-${tag.id}-error`}
+        message={error}
+        className="w-full"
+      />
     </li>
   );
 }
@@ -129,6 +189,8 @@ export default function TagManager({
   tags: Tag[];
   canEdit: boolean;
 }) {
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <details className="rounded-lg border bg-card p-3">
       <summary className="cursor-pointer font-semibold text-sm">
@@ -143,11 +205,14 @@ export default function TagManager({
                 languageId={languageId}
                 tag={tag}
                 canEdit={canEdit}
+                fallbackFocusRef={nameInputRef}
               />
             ))}
           </ul>
         )}
-        {canEdit && <AddTagForm languageId={languageId} />}
+        {canEdit && (
+          <AddTagForm languageId={languageId} nameInputRef={nameInputRef} />
+        )}
       </div>
     </details>
   );

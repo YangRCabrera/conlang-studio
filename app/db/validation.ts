@@ -220,10 +220,9 @@ export const updateLexemeInputSchema = z.object({
 });
 
 /**
- * Validates a new sense (meaning) attached to a lexeme. `definition` must be
- * non-empty so a sense is never created blank — a blank sense renders
- * identically to "no senses" in the dictionary table. `part_of_speech` may be
- * empty (not every conlang entry has one pinned down yet).
+ * Validates a new sense (meaning) attached to a lexeme. Both `part_of_speech`
+ * and `definition` must be non-empty (mirrors the `notNull` DB columns) — a
+ * sense is never created half-blank.
  */
 export const createSenseSchema = z.object({
   lexeme_id: z.uuid(),

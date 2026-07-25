@@ -8,8 +8,12 @@ export default function AuthLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <div className="flex flex-1 items-center justify-center p-6">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="flex flex-1 items-center justify-center p-6"
+    >
       {children}
-    </div>
+    </main>
   );
 }

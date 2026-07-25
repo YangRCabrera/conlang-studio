@@ -25,10 +25,13 @@ export default async function WordgenPage({
   if (!syllableStructures.ok) notFound();
 
   return (
-    <WordGenerationForm
-      languageId={id}
-      structures={syllableStructures.data}
-      canEdit={canEdit}
-    />
+    <div className="flex flex-col gap-6 w-full h-full">
+      <h1 className="text-2xl font-semibold">Word Generator</h1>
+      <WordGenerationForm
+        languageId={id}
+        structures={syllableStructures.data}
+        canEdit={canEdit}
+      />
+    </div>
   );
 }

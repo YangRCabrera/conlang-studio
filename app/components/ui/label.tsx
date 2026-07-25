@@ -7,8 +7,10 @@ import { cn } from "@/app/components/utils"
 
 function Label({
   className,
+  required,
+  children,
   ...props
-}: React.ComponentProps<typeof LabelPrimitive.Root>) {
+}: React.ComponentProps<typeof LabelPrimitive.Root> & { required?: boolean }) {
   return (
     <LabelPrimitive.Root
       data-slot="label"
@@ -17,7 +19,16 @@ function Label({
         className
       )}
       {...props}
-    />
+    >
+      {children}
+      {required && (
+        // aria-hidden: the paired input's `required` attribute is what gets
+        // announced to assistive tech ("required"); this is a sighted-user cue only.
+        <span aria-hidden="true" className="text-destructive">
+          *
+        </span>
+      )}
+    </LabelPrimitive.Root>
   )
 }
 

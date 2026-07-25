@@ -73,6 +73,7 @@ function LanguageItem({
         {isEditing ? (
           <Input
             autoFocus
+            id={`rename-name-${lang.id}`}
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
             onKeyDown={(e) => {
@@ -81,6 +82,10 @@ function LanguageItem({
             }}
             onBlur={commitRename}
             disabled={renamePending}
+            aria-invalid={!!renameError}
+            aria-describedby={
+              renameError ? `rename-name-${lang.id}-error` : undefined
+            }
             className="flex-1 h-8"
           />
         ) : (
@@ -132,7 +137,7 @@ function LanguageItem({
           </form>
         </DeleteConfirmDialog>
       </div>
-      <FormError message={renameError} />
+      <FormError id={`rename-name-${lang.id}-error`} message={renameError} />
     </li>
   );
 }
@@ -152,6 +157,8 @@ export default function LanguageList({
     null,
   );
   const createInputRef = useRef<HTMLInputElement>(null);
+  const createError =
+    failureMessage(createState) ?? fieldError(createState, 'name');
 
   return (
     <div>
@@ -159,20 +166,19 @@ export default function LanguageList({
         <div className="flex gap-2">
           <Input
             ref={createInputRef}
+            id="new-language-name"
             name="name"
             placeholder="New language name"
             required
+            aria-invalid={!!createError}
+            aria-describedby={createError ? 'new-language-name-error' : undefined}
             className="flex-1"
           />
           <Button type="submit" disabled={createPending}>
             Create
           </Button>
         </div>
-        <FormError
-          message={
-            failureMessage(createState) ?? fieldError(createState, 'name')
-          }
-        />
+        <FormError id="new-language-name-error" message={createError} />
       </form>
 
       {langs.length === 0 ? (

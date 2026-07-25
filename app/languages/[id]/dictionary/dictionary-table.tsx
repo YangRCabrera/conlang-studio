@@ -81,6 +81,8 @@ function AddLexemeForm({
           name="term"
           value={term}
           onChange={(e) => setTerm(e.target.value)}
+          aria-invalid={!!error}
+          aria-describedby={error ? 'new-term-error' : undefined}
           className="font-mono w-40"
         />
       </div>
@@ -96,7 +98,7 @@ function AddLexemeForm({
       <Button type="submit" disabled={pending} className="w-32">
         {pending ? 'Adding…' : 'Add Word'}
       </Button>
-      <FormError message={error} className="w-full" />
+      <FormError id="new-term-error" message={error} className="w-full" />
     </form>
   );
 }
@@ -162,6 +164,8 @@ function AddSenseForm({
           name="definition"
           value={definition}
           onChange={(e) => setDefinition(e.target.value)}
+          aria-invalid={!!error}
+          aria-describedby={error ? `new-definition-${lexemeId}-error` : undefined}
         />
       </div>
       <Button
@@ -171,7 +175,11 @@ function AddSenseForm({
       >
         {pending ? 'Adding…' : 'Add Sense'}
       </Button>
-      <FormError message={error} className="w-full" />
+      <FormError
+        id={`new-definition-${lexemeId}-error`}
+        message={error}
+        className="w-full"
+      />
     </form>
   );
 }
@@ -242,6 +250,8 @@ function SenseEditRow({
             name="definition"
             value={definition}
             onChange={(e) => setDefinition(e.target.value)}
+            aria-invalid={!!error}
+            aria-describedby={error ? `definition-${sense.id}-error` : undefined}
           />
         </div>
         <Button
@@ -282,7 +292,11 @@ function SenseEditRow({
           <FormError message={failureMessage(deleteState)} className="w-full" />
         </form>
       </DeleteConfirmDialog>
-      <FormError message={error} className="w-full" />
+      <FormError
+        id={`definition-${sense.id}-error`}
+        message={error}
+        className="w-full"
+      />
     </li>
   );
 }
@@ -460,6 +474,8 @@ function LexemeEditCard({
             name="term"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
+            aria-invalid={!!lexemeError}
+            aria-describedby={lexemeError ? `term-${lexeme.id}-error` : undefined}
             className="font-mono w-40"
           />
         </div>
@@ -479,7 +495,11 @@ function LexemeEditCard({
         >
           {savePending ? 'Saving…' : 'Save'}
         </Button>
-        <FormError message={lexemeError} className="w-full" />
+        <FormError
+          id={`term-${lexeme.id}-error`}
+          message={lexemeError}
+          className="w-full"
+        />
       </form>
 
       {/* Senses */}

@@ -50,13 +50,15 @@ function AddTagForm({
           name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          aria-invalid={!!error}
+          aria-describedby={error ? 'new-tag-name-error' : undefined}
           className="w-48"
         />
       </div>
       <Button type="submit" disabled={pending} className="w-24">
         {pending ? 'Adding…' : 'Add Tag'}
       </Button>
-      <FormError message={error} className="w-full" />
+      <FormError id="new-tag-name-error" message={error} className="w-full" />
     </form>
   );
 }
@@ -111,6 +113,8 @@ function TagRow({
             name="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            aria-invalid={!!error}
+            aria-describedby={error ? `tag-name-${tag.id}-error` : undefined}
           />
         </div>
         <Button
@@ -151,7 +155,11 @@ function TagRow({
           <FormError message={failureMessage(deleteState)} className="w-full" />
         </form>
       </DeleteConfirmDialog>
-      <FormError message={error} className="w-full" />
+      <FormError
+        id={`tag-name-${tag.id}-error`}
+        message={error}
+        className="w-full"
+      />
     </li>
   );
 }

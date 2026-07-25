@@ -26,8 +26,9 @@ export default async function PhonemesPage({
 
   return (
     <div className="flex flex-col gap-10">
+      <h1 className="text-2xl font-semibold">Phonemes & Groups</h1>
       <section>
-        <h1 className="text-2xl font-semibold mb-6">Phonemes</h1>
+        <h2 className="text-xl font-semibold mb-6">Phonemes</h2>
         <PhonemeList
           phonemes={phonemesResult.data}
           languageId={id}
@@ -35,7 +36,7 @@ export default async function PhonemesPage({
         />
       </section>
       <section>
-        <h1 className="text-2xl font-semibold mb-6">Groups</h1>
+        <h2 className="text-xl font-semibold mb-6">Groups</h2>
         <PhonemeGroupsList
           languageId={id}
           groups={groupsResult.data}

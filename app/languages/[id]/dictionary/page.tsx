@@ -24,11 +24,14 @@ export default async function DictionaryPage({
   if (!dictionary.ok || !allTags.ok) notFound();
 
   return (
-    <DictionaryTable
-      languageId={id}
-      dictionary={dictionary.data}
-      allTags={allTags.data}
-      canEdit={canEdit}
-    />
+    <div className="flex flex-col gap-6">
+      <h1 className="text-2xl font-semibold">Dictionary</h1>
+      <DictionaryTable
+        languageId={id}
+        dictionary={dictionary.data}
+        allTags={allTags.data}
+        canEdit={canEdit}
+      />
+    </div>
   );
 }

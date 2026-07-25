@@ -28,9 +28,9 @@ function LanguageItem({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
-  const [renameState, setRenameState] = useState<
-    Awaited<ReturnType<typeof updateLanguage>> | null
-  >(null);
+  const [renameState, setRenameState] = useState<Awaited<
+    ReturnType<typeof updateLanguage>
+  > | null>(null);
   const [renamePending, startTransition] = useTransition();
   const renameTriggerRef = useRef<HTMLButtonElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -74,11 +74,19 @@ function LanguageItem({
   useFocusOnError(renameError, renameInputRef, renamePending);
 
   return (
-    <li ref={rowRef} className="flex flex-col gap-1 rounded-lg border bg-card p-3">
+    <li
+      ref={rowRef}
+      className="flex flex-col gap-1 rounded-lg border bg-card p-3"
+    >
       <div className="flex items-center gap-2">
         {isEditing ? (
           <Input
             ref={renameInputRef}
+            // Deliberate: this reveals in response to clicking "Rename", not
+            // on page load, so the disorientation `no-autofocus` guards
+            // against doesn't apply — the user just asked for an editable
+            // field and expects focus to land in it immediately.
+            // eslint-disable-next-line jsx-a11y/no-autofocus
             autoFocus
             id={`rename-name-${lang.id}`}
             value={editName}
@@ -180,7 +188,9 @@ export default function LanguageList({
             placeholder="New language name"
             required
             aria-invalid={!!createError}
-            aria-describedby={createError ? 'new-language-name-error' : undefined}
+            aria-describedby={
+              createError ? 'new-language-name-error' : undefined
+            }
             className="flex-1"
           />
           <Button type="submit" disabled={createPending}>
@@ -191,7 +201,9 @@ export default function LanguageList({
       </form>
 
       {langs.length === 0 ? (
-        <p className="text-muted-foreground">No languages yet. Create one above.</p>
+        <p className="text-muted-foreground">
+          No languages yet. Create one above.
+        </p>
       ) : (
         <ul className="space-y-2">
           {langs.map((lang) => (

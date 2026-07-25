@@ -42,5 +42,14 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       testMatch: /sign-in\.spec\.ts/,
     },
+    {
+      // Defaults to the authenticated session (the "authenticated pages"
+      // describe block relies on this); the "public pages" block overrides
+      // to a signed-out context per-test via `test.use()`.
+      name: 'chromium-a11y',
+      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/user.json' },
+      dependencies: ['setup'],
+      testMatch: /a11y\.spec\.ts/,
+    },
   ],
 });

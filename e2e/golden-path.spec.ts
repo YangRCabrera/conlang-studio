@@ -8,7 +8,7 @@ test('authenticated user builds a minimal language and generates a word', async 
 
   // 1. Create the language.
   await page.goto('/languages');
-  await page.getByPlaceholder('New language name').fill(languageName);
+  await page.getByLabel('New language name').fill(languageName);
   await page.getByRole('button', { name: 'Create' }).click();
   await page.getByRole('link', { name: languageName }).click();
   await expect(page).toHaveURL(/\/languages\/[0-9a-f-]{36}$/);
@@ -21,13 +21,13 @@ test('authenticated user builds a minimal language and generates a word', async 
   const groupsSection = page.locator('section').filter({ hasText: 'Groups' });
 
   for (const symbol of ['p', 'a']) {
-    await phonemesSection.getByPlaceholder('Symbol *').fill(symbol);
+    await phonemesSection.getByLabel('Symbol').fill(symbol);
     await phonemesSection.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(phonemesSection.getByText(`Symbol: ${symbol}`)).toBeVisible();
   }
 
   // 3. Create a phoneme group, then edit it to check both phonemes in as members.
-  await groupsSection.getByPlaceholder('New Group').fill('core');
+  await groupsSection.getByLabel('New Group').fill('core');
   await groupsSection.getByRole('button', { name: 'Add', exact: true }).click();
   await groupsSection.getByRole('button', { name: 'Edit' }).click();
   await groupsSection.getByLabel('[ <p> ]').check();

@@ -73,7 +73,7 @@ test.describe('authenticated pages', () => {
     const languageName = trackLanguage(`e2e-a11y-${Date.now()}`);
 
     await page.goto('/languages');
-    await page.getByPlaceholder('New language name').fill(languageName);
+    await page.getByLabel('New language name').fill(languageName);
     await page.getByRole('button', { name: 'Create' }).click();
     await page.getByRole('link', { name: languageName }).click();
     await expect(page).toHaveURL(/\/languages\/[0-9a-f-]{36}$/);
@@ -89,7 +89,7 @@ test.describe('authenticated pages', () => {
     const phonemesSection = page
       .locator('section')
       .filter({ hasText: 'Phonemes' });
-    await phonemesSection.getByPlaceholder('Symbol *').fill('p');
+    await phonemesSection.getByLabel('Symbol').fill('p');
     await phonemesSection.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(phonemesSection.getByText('Symbol: p')).toBeVisible();
     await scanForViolations(page);

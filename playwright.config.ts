@@ -5,6 +5,7 @@ const baseURL = 'http://localhost:3000';
 
 export default defineConfig({
   testDir: './e2e',
+  globalSetup: require.resolve('./e2e/global-setup'),
   // Locally this budgets a single test end-to-end against an already-warm
   // dev server. In CI, the same flow crosses a real network hop to Clerk
   // plus queries against a freshly created Neon branch — both measurably

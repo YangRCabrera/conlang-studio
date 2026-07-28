@@ -6,5 +6,5 @@ test('test account can sign in through the real Clerk form, including device ver
 }) => {
   await signInWithTestAccount(page);
   await expect(page).toHaveURL(/\/languages$/);
-  await expect(page.getByPlaceholder('New language name')).toBeVisible();
+  await expect(page.getByLabel('New language name')).toBeVisible();
 });

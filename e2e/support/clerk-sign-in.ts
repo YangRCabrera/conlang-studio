@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { setupClerkTestingToken } from '@clerk/testing/playwright';
 
 /**
  * Drives the real Clerk sign-in form at `/sign-in` (a full page, not the
@@ -16,6 +17,10 @@ export async function signInWithTestAccount(page: Page) {
       'CLERK_TEST_USER_EMAIL / CLERK_TEST_USER_PASSWORD must be set in .env for e2e sign-in',
     );
   }
+
+  // Bypasses Clerk's bot detection, which otherwise stalls the Frontend
+  // API calls the hosted sign-in form makes from a CI runner's IP.
+  await setupClerkTestingToken({ page });
 
   await page.goto('/sign-in');
   await page.getByLabel('Email address').fill(email);

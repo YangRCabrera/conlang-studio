@@ -18,7 +18,7 @@ setup('authenticate', async ({ page, browser }) => {
     const probe = await ctx.newPage();
     await probe.goto('/languages');
     const stillAuthed = await probe
-      .getByPlaceholder('New language name')
+      .getByLabel('New language name')
       .isVisible()
       .catch(() => false);
     await ctx.close();

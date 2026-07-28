@@ -59,7 +59,8 @@ matching set of authenticated HTTP API routes under `/api/languages/[id]/...`
   (Radix primitives, `cva` variants) for styling
 - [Vitest](https://vitest.dev/) for unit tests, [Playwright](https://playwright.dev/)
   for end-to-end tests, [axe-core](https://github.com/dequelabs/axe-core-npm)
-  for automated accessibility scanning
+  for automated accessibility scanning, [@clerk/testing](https://clerk.com/docs/guides/development/testing/overview)
+  to bypass Clerk's bot detection when the e2e suite runs in CI
 - [eslint-plugin-jsx-a11y](https://github.com/jsx-eslint/eslint-plugin-jsx-a11y)
   layered on top of `eslint-config-next`'s baseline rules
 

@@ -156,6 +156,8 @@ End-to-end coverage of adapters/DB-touching flows lives separately in `e2e/` (Pl
 
 In CI (`.github/workflows/ci.yml`), the `e2e` job runs on `pull_request` only, after the `ci` job passes. It forks an ephemeral Neon branch from production (schema + the seeded public demo language come along for free), applies any pending migration the PR introduces, then runs the suite against that branch — the shared *dev* database is never touched by CI. The single shared Clerk test account is still a bottleneck across concurrent PRs, so the job holds a repo-wide `concurrency` group (`e2e-clerk-shared-account`) to serialize runs instead of racing logins. The job is advisory (`continue-on-error: true`) while it proves out — promote it to a required check once it's been stable for a while. For local iteration, it's still run manually as part of the `verify` skill before pushing.
 
+`@clerk/testing` (`e2e/global-setup.ts`, plus `setupClerkTestingToken` calls in `e2e/support/clerk-sign-in.ts` and the auto-fixture in `e2e/fixtures.ts`) fetches and applies a Clerk Testing Token so automated runs bypass Clerk's bot detection, which can otherwise silently stall the Frontend API calls an authenticated session makes from a CI runner's IP.
+
 ---
 
 ## Documentation

@@ -51,5 +51,8 @@ export async function signInWithTestAccount(page: Page) {
     }
   }
 
-  await page.waitForURL(/\/languages$/, { timeout: 15_000 });
+  // 15s was tuned against a locally-warmed dev server; CI's redirect
+  // involves a real network hop to Clerk plus a fresh Neon connection and
+  // has been observed to occasionally exceed that.
+  await page.waitForURL(/\/languages$/, { timeout: 30_000 });
 }

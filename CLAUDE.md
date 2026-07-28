@@ -6,7 +6,7 @@
 
 - `npm run dev` — dev server at http://localhost:3000
 - `npm run test:run` — vitest, single pass (`npm test` is watch mode; don't use it from an agent)
-- `npm run test:e2e` — Playwright, against a running dev server. Not run in CI (single shared Clerk test account and dev DB, no per-worker isolation) — run it manually via the `verify` skill.
+- `npm run test:e2e` — Playwright, against a running dev server. Runs in CI on `pull_request` (advisory — `continue-on-error`, not yet a required check) against an ephemeral Neon branch forked from production, per `.github/workflows/ci.yml`; run it manually via the `verify` skill for local iteration.
 - `npm run lint` — ESLint
 - `npm run build` — production build
 - `npm run typecheck` — `next typegen && tsc --noEmit`, the strictest whole-project type check. `build`'s TypeScript pass only checks files reachable from routes/pages despite `tsconfig.json` including the whole project — `typecheck` is what CI runs and what actually catches errors in files like tests.
@@ -152,7 +152,9 @@ Components are adapters too, not a second home for logic.
 
 Vitest. Unit tests live in `app/lib/__tests__/` and target **pure, framework-free domain logic** (`phonotactics.ts`, `wordgen.ts`). Adapters and DB-touching service functions are not unit-tested — keep new domain logic pure (no DB, no framework imports) so it stays testable this way. Run with `npm run test:run`.
 
-End-to-end coverage of adapters/DB-touching flows lives separately in `e2e/` (Playwright): an authenticated golden-path spec (create a language through generating a word), an anonymous-visitor spec against the public demo language, a sign-in spec, and an accessibility spec (`a11y.spec.ts`, `@axe-core/playwright` scanning public and authenticated pages against the WCAG 2.0/2.1 A/AA tags, on a dedicated `chromium-a11y` Playwright project), plus shared fixtures and a Clerk auth setup. Run with `npm run test:e2e` against a running dev server. Deliberately **not** in CI — there's one shared Clerk test account and one shared dev database (`workers: 1`, no per-worker isolation), so it's run manually as part of the `verify` skill before pushing.
+End-to-end coverage of adapters/DB-touching flows lives separately in `e2e/` (Playwright): an authenticated golden-path spec (create a language through generating a word), an anonymous-visitor spec against the public demo language, a sign-in spec, and an accessibility spec (`a11y.spec.ts`, `@axe-core/playwright` scanning public and authenticated pages against the WCAG 2.0/2.1 A/AA tags, on a dedicated `chromium-a11y` Playwright project), plus shared fixtures and a Clerk auth setup. Run with `npm run test:e2e` against a running dev server (`workers: 1` — one shared Clerk test account, so specs never run concurrently within a run).
+
+In CI (`.github/workflows/ci.yml`), the `e2e` job runs on `pull_request` only, after the `ci` job passes. It forks an ephemeral Neon branch from production (schema + the seeded public demo language come along for free), applies any pending migration the PR introduces, then runs the suite against that branch — the shared *dev* database is never touched by CI. The single shared Clerk test account is still a bottleneck across concurrent PRs, so the job holds a repo-wide `concurrency` group (`e2e-clerk-shared-account`) to serialize runs instead of racing logins. The job is advisory (`continue-on-error: true`) while it proves out — promote it to a required check once it's been stable for a while. For local iteration, it's still run manually as part of the `verify` skill before pushing.
 
 ---
 

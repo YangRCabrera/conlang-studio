@@ -5,7 +5,13 @@ const baseURL = 'http://localhost:3000';
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30_000,
+  // Locally this budgets a single test end-to-end against an already-warm
+  // dev server. In CI, the same flow crosses a real network hop to Clerk
+  // plus queries against a freshly created Neon branch — both measurably
+  // slower than local, so golden-path's many-step scenario needs more room
+  // there. Individual assertions inherit this via `expect.timeout` below.
+  timeout: process.env.CI ? 60_000 : 30_000,
+  expect: { timeout: process.env.CI ? 15_000 : 5_000 },
   // One shared Clerk test account and one shared real dev DB (no per-worker
   // isolation) — parallel workers would mean concurrent logins on the same
   // Clerk dev-instance account and concurrent language creation/cleanup

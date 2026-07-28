@@ -113,16 +113,16 @@ Requires a [Neon](https://neon.tech/) Postgres database and a
 
 ## Commands
 
-| Command               | Purpose                                                        |
-| --------------------- | -------------------------------------------------------------- |
-| `npm run dev`         | Dev server at http://localhost:3000                            |
-| `npm run build`       | Production build                                               |
-| `npm run typecheck`   | Whole-project type check (`tsc --noEmit`); stricter than `build`, which only checks files reachable from routes |
-| `npm run test:run`    | Vitest, single pass (`npm test` runs in watch mode)            |
+| Command               | Purpose                                                                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`         | Dev server at http://localhost:3000                                                                                                                         |
+| `npm run build`       | Production build                                                                                                                                            |
+| `npm run typecheck`   | Whole-project type check (`tsc --noEmit`); stricter than `build`, which only checks files reachable from routes                                             |
+| `npm run test:run`    | Vitest, single pass (`npm test` runs in watch mode)                                                                                                         |
 | `npm run test:e2e`    | Playwright end-to-end tests against a running dev server; runs in CI on pull requests against an ephemeral Neon branch (advisory, not yet a required check) |
-| `npm run lint`        | ESLint                                                         |
-| `npm run db:generate` | Generate a migration from schema changes in `app/db/schema.ts` |
-| `npm run db:migrate`  | Apply pending migrations to the database                       |
+| `npm run lint`        | ESLint                                                                                                                                                      |
+| `npm run db:generate` | Generate a migration from schema changes in `app/db/schema.ts`                                                                                              |
+| `npm run db:migrate`  | Apply pending migrations to the database                                                                                                                    |
 
 ## Architecture
 

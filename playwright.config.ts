@@ -19,10 +19,16 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'npm run dev',
+    // `next dev` compiles routes on demand — the first hit to an
+    // uncompiled route can take well past the default action/test
+    // timeouts on a cold CI runner. A production build removes that
+    // per-route compile penalty entirely (and better matches prod
+    // behavior). Local runs keep `next dev` since `reuseExistingServer`
+    // means this command usually isn't even invoked there.
+    command: process.env.CI ? 'npm run build && npm run start' : 'npm run dev',
     url: baseURL,
     reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
+    timeout: process.env.CI ? 180_000 : 60_000,
   },
   projects: [
     { name: 'setup', testMatch: /.*\.setup\.ts/ },

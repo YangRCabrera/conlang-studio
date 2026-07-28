@@ -194,6 +194,7 @@ export const lexemes = pgTable(
         sql.raw(', '),
       )})`,
     ),
+    unique().on(t.language_id, t.term),
   ],
 );
 

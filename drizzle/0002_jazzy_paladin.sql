@@ -1,0 +1,1 @@
+ALTER TABLE "lexemes" ADD CONSTRAINT "lexemes_language_id_term_unique" UNIQUE("language_id","term");

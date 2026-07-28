@@ -258,6 +258,7 @@ describe('builtLiteralTemplates', () => {
 
 describe('generateWordSet', () => {
   const identity = <T,>(w: T) => w;
+  const noneExist = () => false;
 
   function* uniqueSyllables(): Generator<{ id: string; symbol: string }[]> {
     let n = 0;
@@ -265,18 +266,18 @@ describe('generateWordSet', () => {
   }
 
   it('returns the requested number of words when the phonological space is large enough', () => {
-    const words = generateWordSet(5, 1, 1, uniqueSyllables(), () => 0, identity);
+    const words = generateWordSet(5, 1, 1, uniqueSyllables(), () => 0, identity, noneExist);
     expect(words.size).toBe(5);
   });
 
   it('returns fewer than requested when the space is too constrained', () => {
     // Only one possible word exists: 'kaka' (fixed syllable, fixed 2-syllable count)
-    const words = generateWordSet(5, 2, 2, repeatSyllable('ka'), () => 0, identity);
+    const words = generateWordSet(5, 2, 2, repeatSyllable('ka'), () => 0, identity, noneExist);
     expect(words.size).toBe(1);
   });
 
   it('never returns duplicate words', () => {
-    const words = generateWordSet(10, 1, 1, uniqueSyllables(), () => 0, identity);
+    const words = generateWordSet(10, 1, 1, uniqueSyllables(), () => 0, identity, noneExist);
     expect(new Set([...words]).size).toBe(words.size);
   });
 
@@ -284,8 +285,23 @@ describe('generateWordSet', () => {
     // The transform rewrites every token to 'x', merging all raw words into one
     const toX = (w: { id: string; symbol: string }[]) =>
       w.map(() => ({ id: 'id-x', symbol: 'x' }));
-    const words = generateWordSet(5, 1, 1, uniqueSyllables(), () => 0, toX);
+    const words = generateWordSet(5, 1, 1, uniqueSyllables(), () => 0, toX, noneExist);
     expect([...words]).toEqual(['x']);
+  });
+
+  it('excludes words reported as already existing, without consuming a slot for them', () => {
+    // uniqueSyllables yields w0, w1, w2, ... in order; treat w0 and w2 as pre-existing
+    const existing = new Set(['w0', 'w2']);
+    const words = generateWordSet(
+      3, 1, 1, uniqueSyllables(), () => 0, identity, (w) => existing.has(w),
+    );
+    expect(words.size).toBe(3);
+    expect([...words]).toEqual(expect.arrayContaining(['w1', 'w3', 'w4']));
+  });
+
+  it('returns fewer than requested when checkIfExists rejects every generated word', () => {
+    const words = generateWordSet(5, 1, 1, uniqueSyllables(), () => 0, identity, () => true);
+    expect(words.size).toBe(0);
   });
 });
 
@@ -431,6 +447,54 @@ describe('generateWordSvc', () => {
     if (result1.ok && result2.ok) {
       expect(result1.data.requested).toBe(5);
       expect([...result1.data.words]).toEqual([...result2.data.words]);
+    }
+  });
+
+  it('excludes words that already exist as lexemes in the language', async () => {
+    // A single syllable structure with one phoneme per slot always yields
+    // 'ka', regardless of rng — so if 'ka' is already a lexeme, every
+    // attempt collides and the result is empty.
+    const structure = {
+      id: STRUCT_ID,
+      language_id: LANG_ID,
+      template: [
+        { kind: 'phoneme', phonemeId: PHONEME_ID_1, optional: false },
+        { kind: 'phoneme', phonemeId: PHONEME_ID_2, optional: false },
+      ],
+      weight: 1,
+    };
+    const phonemes = [
+      { id: PHONEME_ID_1, symbol: 'k', ipa: null, weight: 1 },
+      { id: PHONEME_ID_2, symbol: 'a', ipa: null, weight: 1 },
+    ];
+
+    vi.mocked(db.query.languages.findFirst).mockResolvedValue(mockLanguage);
+    vi.mocked(db.query.phoneme_groups.findMany).mockResolvedValue([]);
+    // Select order: structures, template phonemes, rules (via .orderBy()), lexicon terms
+    const mockWhere = vi.fn()
+      .mockResolvedValueOnce([structure])
+      .mockResolvedValueOnce(phonemes)
+      .mockImplementationOnce(() =>
+        Object.assign(Promise.resolve([]), {
+          orderBy: vi.fn().mockResolvedValue([]),
+        }),
+      )
+      .mockResolvedValueOnce([{ term: 'ka' }]);
+    vi.mocked(db.select).mockReturnValue(
+      asSelectChain({ from: vi.fn().mockReturnValue({ where: mockWhere }) }),
+    );
+
+    const result = await generateWordSvc(mockUser, LANG_ID, {
+      wordsToGenerate: 5,
+      structures: [STRUCT_ID],
+      minSyllables: 1,
+      maxSyllables: 1,
+    }, 42);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.requested).toBe(5);
+      expect(result.data.words.size).toBe(0);
     }
   });
 });

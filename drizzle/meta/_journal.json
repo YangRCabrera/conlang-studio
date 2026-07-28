@@ -15,6 +15,13 @@
       "when": 1784591569077,
       "tag": "0001_broken_mister_sinister",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785204744054,
+      "tag": "0002_jazzy_paladin",
+      "breakpoints": true
     }
   ]
 }

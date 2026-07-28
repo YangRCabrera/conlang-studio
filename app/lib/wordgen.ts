@@ -1,4 +1,5 @@
 import {
+  lexemes,
   phoneme_groups,
   phonemes,
   syllable_structures,
@@ -232,6 +233,7 @@ export function generateWordSet(
   syllableStream: Generator<WordToken[]>,
   rng: Rng,
   transformWord: (word: WordToken[]) => WordToken[],
+  checkIfExists: (word: string) => boolean,
 ) {
   const newWords = new Set<string>();
   const maxAttempts = wordsToGenerate * 10;
@@ -243,11 +245,10 @@ export function generateWordSet(
       maxSyllables,
       rng,
     );
-    newWords.add(
-      transformWord(word)
-        .map((t) => t.symbol)
-        .join(''),
-    );
+    const formedWord = transformWord(word)
+      .map((t) => t.symbol)
+      .join('');
+    if (!checkIfExists(formedWord)) newWords.add(formedWord);
     attempts++;
   }
 
@@ -318,6 +319,13 @@ export async function generateWordSvc(
   const rng = seed !== undefined ? makeRng(seed) : Math.random;
   const syllableStream = generateRandomSyllableStream(literalTemplates, rng);
 
+  const terms = await db
+    .select({ term: lexemes.term })
+    .from(lexemes)
+    .where(eq(lexemes.language_id, lang.data.id));
+
+  const termsSet = new Set(terms.map(({ term }) => term));
+
   const newWords = generateWordSet(
     wordsToGenerate,
     minSyllables,
@@ -325,6 +333,7 @@ export async function generateWordSvc(
     syllableStream,
     rng,
     (word) => applyRules(word, compiledRules),
+    (word) => termsSet.has(word),
   );
 
   return { ok: true, data: { words: newWords, requested: wordsToGenerate } };

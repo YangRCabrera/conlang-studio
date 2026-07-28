@@ -14,9 +14,10 @@ import {
   updateLexemeInputSchema,
   updateSenseInputSchema,
 } from '../db/validation';
-import { notFound, type Result } from './result';
+import { notFound, validationMessage, type Result } from './result';
 import { parseUuid, parseInput } from './parse';
 import {
+  isUniqueViolation,
   ownedLanguageIds,
   parseAndRequireOwnedLanguage,
   parseAndRequireVisibleLanguage,
@@ -84,7 +85,9 @@ export async function getDictionarySvc(
   ]);
 
   const matches = structures.length
-    ? compilePhonotacticsMatcher((await loadLiteralTemplates(structures)).templates)
+    ? compilePhonotacticsMatcher(
+        (await loadLiteralTemplates(structures)).templates,
+      )
     : null;
 
   return {
@@ -97,12 +100,26 @@ export async function getDictionarySvc(
   };
 }
 
+/** `{ ok: false, kind: 'validation' }` for the one field a lexeme's term can collide on. */
+function duplicateTermResult() {
+  return validationMessage({
+    properties: {
+      term: {
+        errors: ['A word with this term already exists in this language.'],
+      },
+    },
+  });
+}
+
 /**
  * Banks a word produced by the wordgen page into the dictionary as a new lexeme,
  * verifying that the language is owned by `user`. `origin` is hardcoded to 'generated'
  * here rather than taken from `rawInput` — this service is specifically the wordgen
  * banking call site referenced in `createLexemeSchema`'s JSDoc; a future manual-entry
  * call site would set 'manual' the same way, not via client input.
+ * Returns `{ ok: false, kind: 'validation' }` if the term already exists in the language
+ * (enforced by the DB's `unique(language_id, term)` constraint, not a pre-check select —
+ * that would race two concurrent inserts).
  */
 export async function addGeneratedWordSvc(
   user: DbUser,
@@ -115,18 +132,29 @@ export async function addGeneratedWordSvc(
   const input = parseInput(addGeneratedLexemeInputSchema, rawInput);
   if (!input.ok) return input;
 
-  const [row] = await db
-    .insert(lexemes)
-    .values({
-      language_id: lang.data.id,
-      term: input.data.term,
-      origin: 'generated',
-    })
-    .returning();
+  try {
+    const [row] = await db
+      .insert(lexemes)
+      .values({
+        language_id: lang.data.id,
+        term: input.data.term,
+        origin: 'generated',
+      })
+      .returning();
 
-  return { ok: true, data: row };
+    return { ok: true, data: row };
+  } catch (error: unknown) {
+    if (isUniqueViolation(error)) return duplicateTermResult();
+    throw error;
+  }
 }
 
+/**
+ * Adds a manually-entered word to the dictionary as a new lexeme, verifying
+ * that the language is owned by `user`.
+ * Returns `{ ok: false, kind: 'validation' }` if the term already exists in the language
+ * (see {@link addGeneratedWordSvc} for why this is a caught DB constraint, not a pre-check).
+ */
 export async function addManualWordSvc(
   user: DbUser,
   rawLanguageId: unknown,
@@ -138,17 +166,22 @@ export async function addManualWordSvc(
   const input = parseInput(createLexemeInputSchema, rawInput);
   if (!input.ok) return input;
 
-  const [row] = await db
-    .insert(lexemes)
-    .values({
-      language_id: lang.data.id,
-      term: input.data.term,
-      notes: input.data.notes,
-      origin: 'manual',
-    })
-    .returning();
+  try {
+    const [row] = await db
+      .insert(lexemes)
+      .values({
+        language_id: lang.data.id,
+        term: input.data.term,
+        notes: input.data.notes,
+        origin: 'manual',
+      })
+      .returning();
 
-  return { ok: true, data: row };
+    return { ok: true, data: row };
+  } catch (error: unknown) {
+    if (isUniqueViolation(error)) return duplicateTermResult();
+    throw error;
+  }
 }
 
 /**

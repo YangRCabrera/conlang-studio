@@ -11,13 +11,17 @@ import type { RuleContext } from '../../db/json-shapes';
 const P = (symbol: string) => `phoneme-${symbol}`;
 const G_VOWELS = 'group-vowels';
 const G_EMPTY = 'group-empty';
+const G_NASALS = 'group-nasals';
+const G_STOPS = 'group-stops';
 
 const phonemeSymbolById = new Map(
-  ['t', 'd', 'a', 'i', 'b', 'x'].map((s) => [P(s), s]),
+  ['t', 'd', 'a', 'i', 'b', 'x', 'p', 'k', 'g', 'm', 'n'].map((s) => [P(s), s]),
 );
 const memberIdsByGroupId = new Map<string, ReadonlySet<string>>([
   [G_VOWELS, new Set([P('a'), P('i')])],
   [G_EMPTY, new Set()],
+  [G_NASALS, new Set([P('m'), P('n')])],
+  [G_STOPS, new Set([P('p'), P('t'), P('k')])],
 ]);
 
 /** Builds a word's token array from one symbol per character. */
@@ -42,17 +46,45 @@ const groupSlot = (groupId: string, optional = false): RuleContext[number] => ({
 });
 const boundary: RuleContext[number] = { kind: 'boundary' };
 
+/** One correspondence pair spec: a phoneme or group `from`, and an optional `output` symbol (omitted = Ø deletion). */
+type PairSpec = {
+  target_phoneme_id?: string;
+  target_group_id?: string;
+  output?: string;
+};
+
+function toPair(spec: PairSpec): RuleParts['correspondences'][number] {
+  const from: RuleParts['correspondences'][number]['from'] =
+    spec.target_phoneme_id !== undefined
+      ? { kind: 'phoneme', phonemeId: spec.target_phoneme_id }
+      : { kind: 'group', groupId: spec.target_group_id! };
+  return { from, to: spec.output ? P(spec.output) : null };
+}
+
 /**
- * Compiles a single rule with defaults: phoneme target, empty contexts.
- * Omitting `output` compiles a deletion rule (Ø): `output_phoneme_id` null.
+ * Compiles a single-pair rule with defaults: phoneme target, empty contexts.
+ * Omitting `output` compiles a deletion pair (Ø): `to` null.
  */
-function rule(parts: Partial<RuleParts> & { output?: string }) {
+function rule(
+  parts: PairSpec & Partial<Pick<RuleParts, 'left_context' | 'right_context'>>,
+) {
   const row: RuleParts = {
-    target_phoneme_id: parts.target_phoneme_id ?? null,
-    target_group_id: parts.target_group_id ?? null,
-    output_phoneme_id: parts.output ? P(parts.output) : null,
+    correspondences: [toPair(parts)],
     left_context: parts.left_context ?? [],
     right_context: parts.right_context ?? [],
+  };
+  return compileRules([row], phonemeSymbolById, memberIdsByGroupId);
+}
+
+/** Compiles a rule with multiple correspondence pairs sharing one environment. */
+function multiRule(
+  pairs: PairSpec[],
+  contexts: Partial<Pick<RuleParts, 'left_context' | 'right_context'>> = {},
+) {
+  const row: RuleParts = {
+    correspondences: pairs.map(toPair),
+    left_context: contexts.left_context ?? [],
+    right_context: contexts.right_context ?? [],
   };
   return compileRules([row], phonemeSymbolById, memberIdsByGroupId);
 }
@@ -262,5 +294,56 @@ describe('applyRules — deletion (Ø output)', () => {
     const rules = rule({ target_group_id: G_VOWELS });
     const result = applyRules(word('ai'), rules);
     expect(result).toHaveLength(0);
+  });
+});
+
+describe('applyRules — correspondence pairs', () => {
+  it('one rule with multiple pairs replaces the demo language\'s three single-pair rules', () => {
+    // p, t, k → b, d, g / _ Nasal — one rule instead of three
+    const rules = multiRule(
+      [
+        { target_phoneme_id: P('p'), output: 'b' },
+        { target_phoneme_id: P('t'), output: 'd' },
+        { target_phoneme_id: P('k'), output: 'g' },
+      ],
+      { right_context: [groupSlot(G_NASALS)] },
+    );
+    expect(surface(applyRules(word('apna'), rules))).toBe('abna');
+    expect(surface(applyRules(word('atna'), rules))).toBe('adna');
+    expect(surface(applyRules(word('akma'), rules))).toBe('agma');
+    // not before a nasal: none of the pairs fire
+    expect(surface(applyRules(word('apta'), rules))).toBe('apta');
+  });
+
+  it('different positions in one pass resolve to different pairs simultaneously', () => {
+    const rules = multiRule([
+      { target_phoneme_id: P('p'), output: 'b' },
+      { target_phoneme_id: P('t'), output: 'd' },
+      { target_phoneme_id: P('k'), output: 'g' },
+    ]);
+    expect(surface(applyRules(word('ptk'), rules))).toBe('bdg');
+  });
+
+  it('a pair with to: null deletes while sibling pairs in the same rule rewrite', () => {
+    const rules = multiRule([
+      { target_phoneme_id: P('p') }, // Ø
+      { target_phoneme_id: P('t'), output: 'd' },
+    ]);
+    expect(surface(applyRules(word('pat'), rules))).toBe('ad');
+  });
+
+  it('the first pair whose from-set contains a token wins when pairs overlap', () => {
+    // p is matched individually by the first pair AND via G_STOPS by the second;
+    // the first pair in list order wins, so p -> x, not p -> y.
+    const rules = multiRule([
+      { target_phoneme_id: P('p'), output: 'x' },
+      { target_group_id: G_STOPS, output: 'a' },
+    ]);
+    expect(surface(applyRules(word('ptk'), rules))).toBe('xaa');
+  });
+
+  it('a group from-set expands to every member, each still resolving to that pair', () => {
+    const rules = multiRule([{ target_group_id: G_STOPS, output: 'x' }]);
+    expect(surface(applyRules(word('ptk'), rules))).toBe('xxx');
   });
 });

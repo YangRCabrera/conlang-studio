@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { templateSchema, contextSchema, LEXEME_ORIGINS } from './json-shapes';
+import {
+  templateSchema,
+  contextSchema,
+  correspondencesSchema,
+  LEXEME_ORIGINS,
+} from './json-shapes';
 
 /** Validates any UUID string — used to sanitize id params in actions and route handlers. */
 export const uuidSchema = z.uuid();
@@ -112,56 +117,32 @@ export const updateSyllableStructureInputSchema = z.object({
 
 /**
  * Validates a new phonological rewrite rule.
- * Exactly one of `target_phoneme_id` or `target_group_id` must be present —
- * the rule matches either a single phoneme or every member of a group.
- * `output_phoneme_id` is optional — absent means deletion (Ø).
+ * `correspondences` is the rule's ordered `{ from, to }` pair list (min length 1) —
+ * see {@link correspondencesSchema}. A pair's `to` is nullable (present, `null`
+ * means deletion, Ø) rather than a single rule-level field.
  */
-export const createRuleSchema = z
-  .object({
-    language_id: z.uuid(),
-    position: z.int().nonnegative(),
-    target_phoneme_id: z.uuid().optional(),
-    target_group_id: z.uuid().optional(),
-    output_phoneme_id: z.uuid().optional(),
-    left_context: contextSchema,
-    right_context: contextSchema,
-  })
-  .refine(
-    (v) =>
-      (v.target_phoneme_id !== undefined) !== (v.target_group_id !== undefined),
-    {
-      message:
-        'Exactly one of target_phoneme_id or target_group_id must be set',
-    },
-  );
+export const createRuleSchema = z.object({
+  language_id: z.uuid(),
+  position: z.int().nonnegative(),
+  correspondences: correspondencesSchema,
+  left_context: contextSchema,
+  right_context: contextSchema,
+});
 
 /**
  * Shared shape for creating and updating a phonological rule from client input.
  * `language_id` is intentionally absent — it comes from the route segment, not the request body.
  * `position` is intentionally absent — it is assigned server-side on create (appended to the
  * end of the language's rule order) and changed only through the dedicated move operation.
- * Exactly one of `target_phoneme_id` or `target_group_id` must be present (mirrors the
- * `target_check` DB constraint). Boundary slots are accepted anywhere inside a context —
+ * `correspondences` carries what used to be the separate target/output fields — see
+ * {@link correspondencesSchema}. Boundary slots are accepted anywhere inside a context —
  * restricting them to the outer edge is deliberately not enforced.
- * `output_phoneme_id` is optional — absent means deletion (Ø): the target is removed
- * rather than rewritten.
  */
-const ruleInputSchema = z
-  .object({
-    target_phoneme_id: z.uuid().optional(),
-    target_group_id: z.uuid().optional(),
-    output_phoneme_id: z.uuid().optional(),
-    left_context: contextSchema,
-    right_context: contextSchema,
-  })
-  .refine(
-    (v) =>
-      (v.target_phoneme_id !== undefined) !== (v.target_group_id !== undefined),
-    {
-      message:
-        'Exactly one of target_phoneme_id or target_group_id must be set',
-    },
-  );
+const ruleInputSchema = z.object({
+  correspondences: correspondencesSchema,
+  left_context: contextSchema,
+  right_context: contextSchema,
+});
 
 /** Validates the client-supplied fields for creating a phonological rule. See {@link ruleInputSchema}. */
 export const createRuleInputSchema = ruleInputSchema;

@@ -7,7 +7,7 @@ import {
   rules,
   users,
 } from '../db/schema';
-import type { RuleContext } from '../db/json-shapes';
+import type { RuleContext, RuleCorrespondences } from '../db/json-shapes';
 import { compileRules, type CompiledRule } from './rule-apply';
 import {
   createRuleInputSchema,
@@ -27,29 +27,30 @@ type Rule = typeof rules.$inferSelect;
 
 /** The parsed shape shared by `createRuleInputSchema` and `updateRuleInputSchema`. */
 type RuleInput = {
-  target_phoneme_id?: string;
-  target_group_id?: string;
-  output_phoneme_id?: string;
+  correspondences: RuleCorrespondences;
   left_context: RuleContext;
   right_context: RuleContext;
 };
 
 /**
- * Collects every phoneme and group id a rule references: the target/output FK
- * fields plus the slots inside both jsonb contexts. Boundary slots carry no id
- * and are skipped, as is an absent `output_phoneme_id` (deletion). Not
- * `separateTemplateIds` from wordgen — that helper assumes every non-phoneme
- * slot is a group, which is false once boundaries exist.
+ * Collects every phoneme and group id a rule references: each correspondence
+ * pair's `from` and `to` (a `to: null` pair is deletion — no id to collect)
+ * plus the slots inside both jsonb contexts. Boundary slots carry no id and
+ * are skipped. Not `separateTemplateIds` from wordgen — that helper assumes
+ * every non-phoneme slot is a group, which is false once boundaries exist.
  */
 function collectRuleReferenceIds(input: RuleInput): {
   phonemeIds: Set<string>;
   groupIds: Set<string>;
 } {
   const phonemeIds = new Set<string>();
-  if (input.output_phoneme_id) phonemeIds.add(input.output_phoneme_id);
   const groupIds = new Set<string>();
-  if (input.target_phoneme_id) phonemeIds.add(input.target_phoneme_id);
-  if (input.target_group_id) groupIds.add(input.target_group_id);
+
+  for (const pair of input.correspondences) {
+    if (pair.from.kind === 'phoneme') phonemeIds.add(pair.from.phonemeId);
+    else groupIds.add(pair.from.groupId);
+    if (pair.to !== null) phonemeIds.add(pair.to);
+  }
 
   for (const slot of [...input.left_context, ...input.right_context]) {
     if (slot.kind === 'phoneme') phonemeIds.add(slot.phonemeId);
@@ -60,9 +61,9 @@ function collectRuleReferenceIds(input: RuleInput): {
 
 /**
  * Verifies that every phoneme and group id referenced by `input` exists in
- * `languageId`. The FK columns only enforce that the rows exist *somewhere* —
- * not that they belong to the same language — and the ids inside the jsonb
- * contexts have no FK at all, so both must be checked here before writing.
+ * `languageId`. None of these ids have a DB FK (they all live in jsonb —
+ * `correspondences`, `left_context`, `right_context`), so this is the only
+ * check standing between a rule and a dangling reference before writing.
  */
 async function validateRuleReferences(
   input: RuleInput,
@@ -107,22 +108,20 @@ const badReferencesResult = () =>
   );
 
 /**
- * Checks whether any rule in `languageId` still references `id` — either
- * through the target/output FK columns or inside a context's jsonb slots
- * (`'phonemeId'` for a phoneme, `'groupId'` for a group). Shared by
- * `deletePhonemeSvc` and `deletePhonemeGroupSvc`: the FK columns are
- * `onDelete: 'restrict'` (a raw delete would throw, not fail cleanly) and the
- * jsonb references have no FK at all, so both kinds must block deletion here.
+ * Checks whether any rule in `languageId` still references `id` — inside a
+ * correspondence pair's `from` (`'phonemeId'`/`'groupId'` nested under
+ * `from`) or `to` (a bare phoneme id, only relevant when `key` is
+ * `'phonemeId'`), or inside a context's jsonb slots. Shared by
+ * `deletePhonemeSvc` and `deletePhonemeGroupSvc`: none of these ids have a DB
+ * FK (they live in jsonb), so this check is the only thing standing between
+ * a delete and a rule left pointing at a phoneme/group that no longer exists.
  */
 export async function isReferencedInRules(
   languageId: string,
   key: 'phonemeId' | 'groupId',
   id: string,
 ): Promise<boolean> {
-  const fkMatch =
-    key === 'phonemeId'
-      ? sql`r.target_phoneme_id = ${id} OR r.output_phoneme_id = ${id}`
-      : sql`r.target_group_id = ${id}`;
+  const toMatch = key === 'phonemeId' ? sql`OR pair->>'to' = ${id}` : sql``;
 
   const { rows } = await db.execute(
     sql`SELECT EXISTS (
@@ -130,7 +129,12 @@ export async function isReferencedInRules(
       FROM rules AS r
       WHERE r.language_id = ${languageId}
       AND (
-        ${fkMatch}
+        EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(r.correspondences) AS pair
+          WHERE pair->'from'->>${key} = ${id}
+          ${toMatch}
+        )
         OR EXISTS (
           SELECT 1
           FROM jsonb_array_elements(r.left_context || r.right_context) AS slot
@@ -148,11 +152,12 @@ export async function isReferencedInRules(
  * trusted `languageId` from a service that already verified ownership
  * (`generateWordSvc`), not raw client input.
  *
- * Only the **output** phonemes' symbols are fetched — targets and context
- * phonemes are matched by id, and those ids cannot dangle because deleting a
- * rule-referenced phoneme/group is blocked (`isReferencedInRules`). Groups
- * resolve to their current member-id sets; a group emptied since the rule was
- * written simply never matches (same tolerance as the phonotactics matcher).
+ * Only every pair's **output** (`to`) phonemes' symbols are fetched — `from`
+ * and context phonemes are matched by id, and those ids cannot dangle because
+ * deleting a rule-referenced phoneme/group is blocked (`isReferencedInRules`).
+ * Groups resolve to their current member-id sets; a group emptied since the
+ * rule was written simply never matches (same tolerance as the phonotactics
+ * matcher).
  */
 export async function loadCompiledRules(
   languageId: string,
@@ -167,8 +172,10 @@ export async function loadCompiledRules(
   const outputIds = new Set<string>();
   const groupIds = new Set<string>();
   for (const rule of ruleRows) {
-    if (rule.output_phoneme_id) outputIds.add(rule.output_phoneme_id);
-    if (rule.target_group_id) groupIds.add(rule.target_group_id);
+    for (const pair of rule.correspondences) {
+      if (pair.to !== null) outputIds.add(pair.to);
+      if (pair.from.kind === 'group') groupIds.add(pair.from.groupId);
+    }
     for (const slot of [...rule.left_context, ...rule.right_context]) {
       if (slot.kind === 'group') groupIds.add(slot.groupId);
     }
@@ -251,9 +258,7 @@ export async function createRuleSvc(
     .values({
       language_id: lang.data.id,
       position: sql`(SELECT COALESCE(MAX(${rules.position}) + 1, 0) FROM ${rules} WHERE ${rules.language_id} = ${lang.data.id})`,
-      target_phoneme_id: input.data.target_phoneme_id ?? null,
-      target_group_id: input.data.target_group_id ?? null,
-      output_phoneme_id: input.data.output_phoneme_id ?? null,
+      correspondences: input.data.correspondences,
       left_context: input.data.left_context,
       right_context: input.data.right_context,
     })
@@ -263,14 +268,10 @@ export async function createRuleSvc(
 }
 
 /**
- * Replaces a rule's target, output, and contexts (full replace — `position`
+ * Replaces a rule's correspondences and contexts (full replace — `position`
  * is only changed via {@link moveRuleSvc}). Fetches the rule first to obtain
  * its `language_id` for the reference check; ownership is enforced via the
  * languages subquery since rules carry no `user_id`.
- *
- * Both target columns are set explicitly (`?? null`) — leaving the unused one
- * out would keep its old value and violate the `target_check` constraint when
- * an edit switches between a phoneme target and a group target.
  */
 export async function updateRuleSvc(
   user: DbUser,
@@ -301,9 +302,7 @@ export async function updateRuleSvc(
   const [updated] = await db
     .update(rules)
     .set({
-      target_phoneme_id: input.data.target_phoneme_id ?? null,
-      target_group_id: input.data.target_group_id ?? null,
-      output_phoneme_id: input.data.output_phoneme_id ?? null,
+      correspondences: input.data.correspondences,
       left_context: input.data.left_context,
       right_context: input.data.right_context,
     })

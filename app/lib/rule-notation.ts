@@ -1,4 +1,4 @@
-import type { RuleContext } from '../db/json-shapes';
+import type { RuleContext, RuleCorrespondences } from '../db/json-shapes';
 
 /**
  * The fields of a rule row that notation formatting needs. Typed structurally
@@ -6,9 +6,7 @@ import type { RuleContext } from '../db/json-shapes';
  * schema imports.
  */
 export type RuleNotationParts = {
-  target_phoneme_id: string | null;
-  target_group_id: string | null;
-  output_phoneme_id: string | null;
+  correspondences: RuleCorrespondences;
   left_context: RuleContext;
   right_context: RuleContext;
 };
@@ -46,11 +44,46 @@ export function formatContext(
     .join(' ');
 }
 
+/** Renders one correspondence pair's `from` side: a phoneme symbol or group name. */
+function formatFrom(
+  from: RuleCorrespondences[number]['from'],
+  phonemeSymbolById: Map<string, string>,
+  groupNameById: Map<string, string>,
+): string {
+  return from.kind === 'phoneme'
+    ? (phonemeSymbolById.get(from.phonemeId) ?? '?')
+    : (groupNameById.get(from.groupId) ?? '?');
+}
+
+/** Renders one correspondence pair's `to` side: a phoneme symbol, or `∅` for deletion. */
+function formatTo(
+  to: string | null,
+  phonemeSymbolById: Map<string, string>,
+): string {
+  return to === null ? '∅' : (phonemeSymbolById.get(to) ?? '?');
+}
+
+/**
+ * Renders one correspondence pair standalone, e.g. `p → b` or `t → ∅` —
+ * used for the rule form's per-pair chip display, distinct from
+ * {@link formatRule}'s comma-joined whole-rule rendering.
+ */
+export function formatPair(
+  pair: RuleCorrespondences[number],
+  phonemeSymbolById: Map<string, string>,
+  groupNameById: Map<string, string>,
+): string {
+  return `${formatFrom(pair.from, phonemeSymbolById, groupNameById)} → ${formatTo(pair.to, phonemeSymbolById)}`;
+}
+
 /**
  * Renders a rule in standard phonological notation: `t → d / V _ #`.
+ * Multiple correspondence pairs render as comma-joined lists on each side, in
+ * pair order — `p, t, k → b, d, g / _ N` — so a single pair (the common case)
+ * degenerates to exactly the plain `t → d` form. A pair's `to: null` renders
+ * as `∅` (deletion) in that position of the output list.
  * The environment (`/ left _ right`) is elided entirely when both contexts
- * are empty — an unconditional rewrite reads as just `t → d`. A `null`
- * `output_phoneme_id` renders as `∅` (deletion).
+ * are empty.
  *
  * Pure and dependency-free (like `app/db/json-shapes.ts`), so unlike the rest
  * of `app/lib/*` it is safe to import from Client Components — the rules UI
@@ -61,16 +94,12 @@ export function formatRule(
   phonemeSymbolById: Map<string, string>,
   groupNameById: Map<string, string>,
 ): string {
-  const target =
-    rule.target_phoneme_id !== null
-      ? (phonemeSymbolById.get(rule.target_phoneme_id) ?? '?')
-      : rule.target_group_id !== null
-        ? (groupNameById.get(rule.target_group_id) ?? '?')
-        : '?';
-  const output =
-    rule.output_phoneme_id === null
-      ? '∅'
-      : (phonemeSymbolById.get(rule.output_phoneme_id) ?? '?');
+  const target = rule.correspondences
+    .map((pair) => formatFrom(pair.from, phonemeSymbolById, groupNameById))
+    .join(', ');
+  const output = rule.correspondences
+    .map((pair) => formatTo(pair.to, phonemeSymbolById))
+    .join(', ');
 
   const left = formatContext(
     rule.left_context,

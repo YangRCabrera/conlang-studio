@@ -1,4 +1,4 @@
-import type { RuleContext } from '../db/json-shapes';
+import type { RuleContext, RuleCorrespondences } from '../db/json-shapes';
 
 /**
  * One phoneme of a generated word. Generation carries tokens (not a joined
@@ -14,9 +14,7 @@ export type WordToken = { id: string; symbol: string };
  * imports — pure and unit-testable, like `rule-notation.ts`.
  */
 export type RuleParts = {
-  target_phoneme_id: string | null;
-  target_group_id: string | null;
-  output_phoneme_id: string | null;
+  correspondences: RuleCorrespondences;
   left_context: RuleContext;
   right_context: RuleContext;
 };
@@ -31,12 +29,24 @@ type CompiledContextSlot =
   | { kind: 'match'; ids: ReadonlySet<string>; optional: boolean }
   | { kind: 'boundary' };
 
-/** A rule resolved from ids to the sets and output token matching needs. */
-export type CompiledRule = {
-  /** The target phoneme's id, or every member id of the target group. */
-  targetIds: ReadonlySet<string>;
-  /** `null` means deletion (Ø): matched tokens are removed rather than replaced. */
+/**
+ * One resolved correspondence pair: every token whose id is in `fromIds`
+ * becomes `output`, or is deleted (Ø) when `output` is null.
+ */
+type CompiledCorrespondence = {
+  fromIds: ReadonlySet<string>;
   output: WordToken | null;
+};
+
+/** A rule resolved from ids to the sets and pairs matching needs. */
+export type CompiledRule = {
+  /**
+   * Checked in list order for each word position — the first pair whose
+   * `fromIds` contains the token there wins. Order only matters when two
+   * pairs' `fromIds` overlap (e.g. a phoneme listed individually and also
+   * via a group used by another pair), which `correspondencesSchema` allows.
+   */
+  correspondences: CompiledCorrespondence[];
   left: CompiledContextSlot[];
   right: CompiledContextSlot[];
 };
@@ -58,14 +68,31 @@ function compileContext(
   });
 }
 
+function compileCorrespondence(
+  pair: RuleCorrespondences[number],
+  phonemeSymbolById: ReadonlyMap<string, string>,
+  memberIdsByGroupId: ReadonlyMap<string, ReadonlySet<string>>,
+): CompiledCorrespondence {
+  return {
+    fromIds:
+      pair.from.kind === 'phoneme'
+        ? new Set([pair.from.phonemeId])
+        : (memberIdsByGroupId.get(pair.from.groupId) ?? new Set()),
+    output:
+      pair.to === null
+        ? null
+        : { id: pair.to, symbol: phonemeSymbolById.get(pair.to) ?? '?' },
+  };
+}
+
 /**
  * Resolves rule rows (already in application order) into {@link CompiledRule}s.
- * `phonemeSymbolById` only needs entries for the rules' **output** phonemes —
- * targets and context phonemes are matched by id and never rendered. An output
- * id missing from the map yields symbol `'?'` rather than throwing; it cannot
- * happen through the service layer (deletion of a referenced phoneme is
- * blocked), so it is not worth failing generation over. A `null`
- * `output_phoneme_id` (Ø) compiles to a `null` output rather than a token.
+ * `phonemeSymbolById` only needs entries for every pair's **output** (`to`)
+ * phoneme — `from` and context phonemes are matched by id and never rendered.
+ * An output id missing from the map yields symbol `'?'` rather than throwing;
+ * it cannot happen through the service layer (deletion of a referenced
+ * phoneme is blocked), so it is not worth failing generation over. A pair's
+ * `to: null` (Ø) compiles to a `null` output rather than a token.
  */
 export function compileRules(
   ruleRows: RuleParts[],
@@ -73,17 +100,9 @@ export function compileRules(
   memberIdsByGroupId: ReadonlyMap<string, ReadonlySet<string>>,
 ): CompiledRule[] {
   return ruleRows.map((rule) => ({
-    targetIds:
-      rule.target_phoneme_id !== null
-        ? new Set([rule.target_phoneme_id])
-        : (memberIdsByGroupId.get(rule.target_group_id ?? '') ?? new Set()),
-    output:
-      rule.output_phoneme_id === null
-        ? null
-        : {
-            id: rule.output_phoneme_id,
-            symbol: phonemeSymbolById.get(rule.output_phoneme_id) ?? '?',
-          },
+    correspondences: rule.correspondences.map((pair) =>
+      compileCorrespondence(pair, phonemeSymbolById, memberIdsByGroupId),
+    ),
     left: compileContext(rule.left_context, memberIdsByGroupId),
     right: compileContext(rule.right_context, memberIdsByGroupId),
   }));
@@ -141,14 +160,15 @@ function matchRight(
  * Applies compiled rules to a word, in array order (the caller supplies them
  * in `position` order, so earlier rules feed later ones).
  *
- * Within one rule, application is **simultaneous**: all match sites are found
- * against the word as it stood when the rule started, then applied at once —
- * a rule's own output never retriggers the same rule (`a → b / b _` turns
- * "baa" into "bba", not "bbb"), and a deletion never closes a gap that lets a
- * later match site in the same pass see a token that has already moved.
- * A rewrite rule (`output` set) preserves word length; a deletion rule
- * (`output` null, Ø) shortens it — either way the next rule in the pipeline
- * reads the word as it now stands.
+ * Within one rule, application is **simultaneous**: all match sites — and the
+ * pair each resolves to — are found against the word as it stood when the
+ * rule started, then applied at once. A rule's own output never retriggers
+ * the same rule (`a → b / b _` turns "baa" into "bba", not "bbb"), and a
+ * deletion never closes a gap that lets a later match site in the same pass
+ * see a token that has already moved. Different positions in the same rule
+ * can resolve to different pairs' outputs (`p, t, k → b, d, g / _ N` rewrites
+ * each place differently in one pass) or to deletion (Ø) — either way the
+ * next rule in the pipeline reads the word as it now stands.
  *
  * The input array is not mutated.
  */
@@ -158,20 +178,24 @@ export function applyRules(
 ): WordToken[] {
   let current = word;
   for (const rule of rules) {
-    const matches = new Set<number>();
+    const outputs = new Map<number, WordToken | null>();
     for (let i = 0; i < current.length; i++) {
+      const pair = rule.correspondences.find((p) => p.fromIds.has(current[i].id));
       if (
-        rule.targetIds.has(current[i].id) &&
+        pair &&
         matchLeft(current, rule.left, rule.left.length - 1, i) &&
         matchRight(current, rule.right, 0, i + 1)
       )
-        matches.add(i);
+        outputs.set(i, pair.output);
     }
-    if (matches.size === 0) continue;
+    if (outputs.size === 0) continue;
     const next: WordToken[] = [];
     for (let i = 0; i < current.length; i++) {
-      if (!matches.has(i)) next.push(current[i]);
-      else if (rule.output !== null) next.push(rule.output);
+      if (!outputs.has(i)) next.push(current[i]);
+      else {
+        const output = outputs.get(i)!;
+        if (output !== null) next.push(output);
+      }
     }
     current = next;
   }

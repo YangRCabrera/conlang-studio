@@ -29,6 +29,13 @@
       "when": 1785768037995,
       "tag": "0003_supreme_living_mummy",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785769978419,
+      "tag": "0004_rules_correspondences",
+      "breakpoints": true
     }
   ]
 }

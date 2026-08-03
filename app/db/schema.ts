@@ -15,6 +15,7 @@ import {
 import {
   SyllableTemplate,
   RuleContext,
+  RuleCorrespondences,
   LEXEME_ORIGINS,
   LexemeOrigin,
 } from './json-shapes';
@@ -131,45 +132,29 @@ export const syllable_structures = pgTable('syllable_structures', {
 
 /**
  * Phonological rewrite rules applied in `position` order during word generation.
- * Each rule transforms a target phoneme (or any member of a target group) into
- * `output_phoneme_id` when `left_context` and `right_context` both match.
- * Exactly one of `target_phoneme_id` or `target_group_id` must be set (enforced by DB check).
- * `output_phoneme_id` is nullable — null means deletion (Ø): the matched segment
- * is removed from the word rather than rewritten.
+ * `correspondences` is an ordered, non-empty list of `{ from, to }` pairs sharing
+ * one `left_context`/`right_context` environment — every phoneme matching a pair's
+ * `from` (a specific phoneme or every member of a group) becomes that pair's `to`
+ * phoneme, or is deleted (Ø) when `to` is null. A single-pair rule is the common
+ * case (`t → d / V _ V`); multiple pairs let one rule express a whole shift
+ * (`p, t, k → b, d, g / _ Nasal`) instead of one rule per phoneme.
+ * No FK on the ids inside `correspondences` — same as `left_context`/`right_context`,
+ * integrity is enforced in the service layer (`validateRuleReferences`,
+ * `isReferencedInRules`), not the database.
  */
-export const rules = pgTable(
-  'rules',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    language_id: uuid('language_id')
-      .notNull()
-      .references(() => languages.id, { onDelete: 'cascade' }),
-    position: integer('position').notNull(),
-    target_phoneme_id: uuid('target_phoneme_id').references(() => phonemes.id, {
-      onDelete: 'restrict',
-    }),
-    target_group_id: uuid('target_group_id').references(
-      () => phoneme_groups.id,
-      {
-        onDelete: 'restrict',
-      },
-    ),
-    output_phoneme_id: uuid('output_phoneme_id').references(() => phonemes.id, {
-      onDelete: 'restrict',
-    }),
-    left_context: jsonb('left_context').$type<RuleContext>().notNull(),
-    right_context: jsonb('right_context').$type<RuleContext>().notNull(),
-    ...timestamps,
-  },
-  (t) => [
-    // Exactly one of phoneme/group target is set.
-    check(
-      'target_check',
-      sql`(${t.target_phoneme_id} IS NOT NULL AND ${t.target_group_id} IS NULL)
-       OR (${t.target_phoneme_id} IS NULL AND ${t.target_group_id} IS NOT NULL)`,
-    ),
-  ],
-);
+export const rules = pgTable('rules', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  language_id: uuid('language_id')
+    .notNull()
+    .references(() => languages.id, { onDelete: 'cascade' }),
+  position: integer('position').notNull(),
+  correspondences: jsonb('correspondences')
+    .$type<RuleCorrespondences>()
+    .notNull(),
+  left_context: jsonb('left_context').$type<RuleContext>().notNull(),
+  right_context: jsonb('right_context').$type<RuleContext>().notNull(),
+  ...timestamps,
+});
 
 /**
  * A dictionary entry (word form) in a language. A lexeme can have multiple senses.
@@ -291,26 +276,16 @@ export const groupMembershipsRelations = relations(
   }),
 );
 
+/**
+ * Only the `language` relation is declared — the phoneme/group ids inside
+ * `correspondences` (and `left_context`/`right_context`) are jsonb, not FK
+ * columns, so Drizzle has nothing to build a relational (`one`/`many`)
+ * traversal from; nothing in the app queries rules that way regardless.
+ */
 export const rulesRelations = relations(rules, ({ one }) => ({
   language: one(languages, {
     fields: [rules.language_id],
     references: [languages.id],
-  }),
-  // Two relations into the same table (phonemes) need explicit relationNames
-  // so Drizzle can tell them apart.
-  targetPhoneme: one(phonemes, {
-    fields: [rules.target_phoneme_id],
-    references: [phonemes.id],
-    relationName: 'rule_target_phoneme',
-  }),
-  outputPhoneme: one(phonemes, {
-    fields: [rules.output_phoneme_id],
-    references: [phonemes.id],
-    relationName: 'rule_output_phoneme',
-  }),
-  targetGroup: one(phoneme_groups, {
-    fields: [rules.target_group_id],
-    references: [phoneme_groups.id],
   }),
 }));
 

@@ -4,9 +4,9 @@ import {
   phonemes as phonemesTable,
   rules as rulesTable,
 } from '@/app/db/schema';
-import type { RuleContext } from '@/app/db/json-shapes';
+import type { RuleContext, RuleCorrespondences } from '@/app/db/json-shapes';
 import type { PhonemeGroupWithMembers } from '@/app/lib/phoneme-groups';
-import { formatRule, formatSlot } from '@/app/lib/rule-notation';
+import { formatPair, formatRule, formatSlot } from '@/app/lib/rule-notation';
 import { useActionState, useMemo, useRef, useState } from 'react';
 import { createRule, deleteRule, moveRule, updateRule } from './actions';
 import {
@@ -90,9 +90,12 @@ function AddRuleForm({
           pending={pending}
           state={state}
           mode="Add"
-          initialTargetKind="phoneme"
-          initialTargetId={phonemes[0].id}
-          initialOutputId={phonemes[0].id}
+          initialCorrespondences={[
+            {
+              from: { kind: 'phoneme', phonemeId: phonemes[0].id },
+              to: phonemes[0].id,
+            },
+          ]}
           initialLeftContext={[]}
           initialRightContext={[]}
           phonemes={phonemes}
@@ -199,11 +202,7 @@ function RuleRow({
         pending={editPending}
         state={editState}
         mode="Edit"
-        initialTargetKind={
-          rule.target_phoneme_id !== null ? 'phoneme' : 'group'
-        }
-        initialTargetId={rule.target_phoneme_id ?? rule.target_group_id ?? ''}
-        initialOutputId={rule.output_phoneme_id ?? ''}
+        initialCorrespondences={rule.correspondences}
         initialLeftContext={rule.left_context}
         initialRightContext={rule.right_context}
         phonemes={phonemes}
@@ -454,11 +453,172 @@ function ContextEditor({
 }
 
 /**
- * Reusable form for adding and editing rules. The two contexts are structured
- * arrays held in local state and shipped as JSON-encoded hidden inputs (the
- * same pattern as the syllable template form); the target picker serializes
- * as a `target_kind` radio + `target_id` select pair that the action
- * translates into the XOR target fields.
+ * Editor for a rule's correspondence list — the ordered `{ from, to }` pairs
+ * that share the rule's one environment. Structurally mirrors
+ * {@link ContextEditor}'s chip-list pattern (add / reorder / remove), but each
+ * chip is a full pair (`p → b`) rather than a single slot, and the last
+ * remaining pair can't be removed — `correspondencesSchema` requires at least
+ * one, and enforcing that here means the "Add"/"Save" button never needs its
+ * own separate check for it.
+ */
+function CorrespondenceEditor({
+  correspondences,
+  onChange,
+  phonemes,
+  groups,
+  phonemeSymbolById,
+  groupNameById,
+}: {
+  correspondences: RuleCorrespondences;
+  onChange: (next: RuleCorrespondences) => void;
+  phonemes: Phoneme[];
+  groups: PhonemeGroupWithMembers[];
+  phonemeSymbolById: Map<string, string>;
+  groupNameById: Map<string, string>;
+}) {
+  const [newFromKind, setNewFromKind] = useState<TargetKind>('phoneme');
+  const [newFromId, setNewFromId] = useState(phonemes[0]?.id ?? '');
+  const [newToId, setNewToId] = useState(phonemes[0]?.id ?? '');
+
+  function switchFromKind(kind: TargetKind) {
+    setNewFromKind(kind);
+    setNewFromId((kind === 'phoneme' ? phonemes[0]?.id : groups[0]?.id) ?? '');
+  }
+
+  function addPair() {
+    if (!newFromId) return;
+    const from: RuleCorrespondences[number]['from'] =
+      newFromKind === 'phoneme'
+        ? { kind: 'phoneme', phonemeId: newFromId }
+        : { kind: 'group', groupId: newFromId };
+    onChange([...correspondences, { from, to: newToId || null }]);
+  }
+
+  function removePair(idx: number) {
+    if (correspondences.length <= 1) return;
+    onChange(correspondences.filter((_, i) => i !== idx));
+  }
+
+  function movePair(idx: number, dir: -1 | 1) {
+    const target = idx + dir;
+    if (target < 0 || target >= correspondences.length) return;
+    const next = [...correspondences];
+    [next[idx], next[target]] = [next[target], next[idx]];
+    onChange(next);
+  }
+
+  const fromOptions = newFromKind === 'phoneme' ? phonemes : groups;
+
+  return (
+    <fieldset className="w-full rounded-lg border p-3">
+      <legend className="px-1 text-sm text-muted-foreground">
+        Correspondences (what becomes what)
+      </legend>
+
+      {/* Pair chips */}
+      <div className="flex flex-wrap gap-1 min-h-8 items-center w-full py-2">
+        {correspondences.map((pair, idx) => (
+          <div
+            key={idx}
+            className="flex items-center gap-0.5 bg-muted border rounded-md p-3 text-sm font-mono"
+          >
+            <span>{formatPair(pair, phonemeSymbolById, groupNameById)}</span>
+            <button
+              type="button"
+              onClick={() => movePair(idx, -1)}
+              disabled={idx === 0}
+              className="px-0.5 text-muted-foreground enabled:hover:text-foreground disabled:opacity-30 cursor-pointer disabled:cursor-auto"
+              aria-label="Move pair up"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              onClick={() => movePair(idx, 1)}
+              disabled={idx === correspondences.length - 1}
+              className="px-0.5 text-muted-foreground enabled:hover:text-foreground disabled:opacity-30 cursor-pointer disabled:cursor-auto"
+              aria-label="Move pair down"
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              onClick={() => removePair(idx)}
+              disabled={correspondences.length <= 1}
+              className="px-0.5 text-muted-foreground enabled:hover:text-red-600 disabled:opacity-30 cursor-pointer disabled:cursor-auto"
+              aria-label="Remove pair"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Add pair controls */}
+      <div className="flex flex-wrap items-center gap-4">
+        <Label className="gap-1 font-normal">
+          <input
+            type="radio"
+            checked={newFromKind === 'phoneme'}
+            onChange={() => switchFromKind('phoneme')}
+            className="accent-primary"
+          />
+          Phoneme
+        </Label>
+        <Label className="gap-1 font-normal">
+          <input
+            type="radio"
+            checked={newFromKind === 'group'}
+            onChange={() => switchFromKind('group')}
+            disabled={groups.length === 0}
+            className="accent-primary"
+          />
+          Group
+        </Label>
+        <select
+          value={newFromId}
+          onChange={(e) => setNewFromId(e.target.value)}
+          aria-label="New pair: from"
+          className="border rounded p-2 text-sm bg-card"
+        >
+          {fromOptions.map((o) => (
+            <option key={o.id} value={o.id}>
+              {'symbol' in o ? o.symbol : o.name}
+            </option>
+          ))}
+        </select>
+        <span className="text-sm text-muted-foreground">becomes</span>
+        <select
+          value={newToId}
+          onChange={(e) => setNewToId(e.target.value)}
+          aria-label="New pair: to"
+          className="border rounded p-2 text-sm bg-card"
+        >
+          <option value="">∅ (delete)</option>
+          {phonemes.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.symbol}
+            </option>
+          ))}
+        </select>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={addPair}
+          disabled={!newFromId}
+          className="w-32"
+        >
+          + Add pair
+        </Button>
+      </div>
+    </fieldset>
+  );
+}
+
+/**
+ * Reusable form for adding and editing rules. The correspondence list and the
+ * two contexts are structured arrays held in local state and shipped as
+ * JSON-encoded hidden inputs (the same pattern as the syllable template form).
  */
 function RuleForm({
   formAction,
@@ -466,9 +626,7 @@ function RuleForm({
   pending,
   state,
   mode,
-  initialTargetKind,
-  initialTargetId,
-  initialOutputId,
+  initialCorrespondences,
   initialLeftContext,
   initialRightContext,
   phonemes,
@@ -481,9 +639,7 @@ function RuleForm({
   pending: boolean;
   state: ActionState;
   mode: 'Add' | 'Edit';
-  initialTargetKind: TargetKind;
-  initialTargetId: string;
-  initialOutputId: string;
+  initialCorrespondences: RuleCorrespondences;
   initialLeftContext: RuleContext;
   initialRightContext: RuleContext;
   phonemes: Phoneme[];
@@ -491,9 +647,9 @@ function RuleForm({
   phonemeSymbolById: Map<string, string>;
   groupNameById: Map<string, string>;
 }) {
-  const [targetKind, setTargetKind] = useState<TargetKind>(initialTargetKind);
-  const [targetId, setTargetId] = useState(initialTargetId);
-  const [outputId, setOutputId] = useState(initialOutputId);
+  const [correspondences, setCorrespondences] = useState<RuleCorrespondences>([
+    ...initialCorrespondences,
+  ]);
   const [leftContext, setLeftContext] = useState<RuleContext>([
     ...initialLeftContext,
   ]);
@@ -501,33 +657,24 @@ function RuleForm({
     ...initialRightContext,
   ]);
 
-  function switchTargetKind(kind: TargetKind) {
-    setTargetKind(kind);
-    setTargetId((kind === 'phoneme' ? phonemes[0]?.id : groups[0]?.id) ?? '');
-  }
-
-  const targetOptions = targetKind === 'phoneme' ? phonemes : groups;
   const errorMessage = formErrorMessage(state);
 
-  const preview = targetId
-    ? formatRule(
-        {
-          target_phoneme_id: targetKind === 'phoneme' ? targetId : null,
-          target_group_id: targetKind === 'group' ? targetId : null,
-          output_phoneme_id: outputId || null,
-          left_context: leftContext,
-          right_context: rightContext,
-        },
-        phonemeSymbolById,
-        groupNameById,
-      )
-    : '—';
+  const preview = formatRule(
+    { correspondences, left_context: leftContext, right_context: rightContext },
+    phonemeSymbolById,
+    groupNameById,
+  );
 
   return (
     <form
       action={formAction}
       className="flex flex-col gap-4 rounded-lg border bg-card p-5 mb-3"
     >
+      <input
+        type="hidden"
+        name="correspondences"
+        value={JSON.stringify(correspondences)}
+      />
       <input
         type="hidden"
         name="left_context"
@@ -539,62 +686,15 @@ function RuleForm({
         value={JSON.stringify(rightContext)}
       />
 
-      {/* Target */}
-      <div className="flex flex-wrap items-center gap-4">
-        <span className="text-sm text-muted-foreground">Target:</span>
-        <Label className="gap-1 font-normal">
-          <input
-            type="radio"
-            name="target_kind"
-            value="phoneme"
-            checked={targetKind === 'phoneme'}
-            onChange={() => switchTargetKind('phoneme')}
-            className="accent-primary"
-          />
-          Phoneme
-        </Label>
-        <Label className="gap-1 font-normal">
-          <input
-            type="radio"
-            name="target_kind"
-            value="group"
-            checked={targetKind === 'group'}
-            onChange={() => switchTargetKind('group')}
-            disabled={groups.length === 0}
-            className="accent-primary"
-          />
-          Group
-        </Label>
-        <select
-          name="target_id"
-          value={targetId}
-          onChange={(e) => setTargetId(e.target.value)}
-          aria-label="Target"
-          className="border rounded p-2 text-sm bg-card"
-        >
-          {targetOptions.map((t) => (
-            <option key={t.id} value={t.id}>
-              {'symbol' in t ? t.symbol : t.name}
-            </option>
-          ))}
-        </select>
-
-        <span className="text-sm text-muted-foreground">becomes</span>
-        <select
-          name="output_phoneme_id"
-          value={outputId}
-          onChange={(e) => setOutputId(e.target.value)}
-          aria-label="Output phoneme"
-          className="border rounded p-2 text-sm bg-card"
-        >
-          <option value="">∅ (delete)</option>
-          {phonemes.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.symbol}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Correspondences */}
+      <CorrespondenceEditor
+        correspondences={correspondences}
+        onChange={setCorrespondences}
+        phonemes={phonemes}
+        groups={groups}
+        phonemeSymbolById={phonemeSymbolById}
+        groupNameById={groupNameById}
+      />
 
       {/* Environment */}
       <ContextEditor
@@ -625,7 +725,11 @@ function RuleForm({
 
       {/* Commit or cancel */}
       <div className="flex flex-row gap-2 self-end">
-        <Button type="submit" disabled={pending || !targetId} className="w-32">
+        <Button
+          type="submit"
+          disabled={pending || correspondences.length === 0}
+          className="w-32"
+        >
           {mode === 'Add' ? 'Add' : 'Save'}
         </Button>
         <Button
@@ -686,8 +790,8 @@ export default function RuleList({
       )}
       {rules.length === 0 ? (
         <p className="text-muted-foreground">
-          No rules yet. Rules rewrite one sound into another (or delete it)
-          when its neighbors match — add one above.
+          No rules yet. Rules rewrite one or more sounds into others (or
+          delete them) when their shared neighbors match — add one above.
         </p>
       ) : (
         <>

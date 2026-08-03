@@ -5,6 +5,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/); versioning
 follows [Semantic Versioning](https://semver.org/), scoped to this app's own
 users and data rather than a public API (see `CLAUDE.md` for the exact rule).
 
+## [1.2.0] - 2026-08-03
+
+### Added
+
+- Rules can now delete a matched sound (Ø) instead of only rewriting it to
+  another phoneme.
+- Rules can now express multiple correspondence pairs sharing one
+  environment — e.g. `p, t, k → b, d, g / _ Nasal` as a single rule instead
+  of one rule per phoneme.
+
 ## [1.1.1] - 2026-07-25
 
 ### Added

@@ -134,6 +134,8 @@ export const syllable_structures = pgTable('syllable_structures', {
  * Each rule transforms a target phoneme (or any member of a target group) into
  * `output_phoneme_id` when `left_context` and `right_context` both match.
  * Exactly one of `target_phoneme_id` or `target_group_id` must be set (enforced by DB check).
+ * `output_phoneme_id` is nullable — null means deletion (Ø): the matched segment
+ * is removed from the word rather than rewritten.
  */
 export const rules = pgTable(
   'rules',
@@ -152,9 +154,9 @@ export const rules = pgTable(
         onDelete: 'restrict',
       },
     ),
-    output_phoneme_id: uuid('output_phoneme_id')
-      .notNull()
-      .references(() => phonemes.id, { onDelete: 'restrict' }),
+    output_phoneme_id: uuid('output_phoneme_id').references(() => phonemes.id, {
+      onDelete: 'restrict',
+    }),
     left_context: jsonb('left_context').$type<RuleContext>().notNull(),
     right_context: jsonb('right_context').$type<RuleContext>().notNull(),
     ...timestamps,

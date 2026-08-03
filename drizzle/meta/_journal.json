@@ -22,6 +22,13 @@
       "when": 1785204744054,
       "tag": "0002_jazzy_paladin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785768037995,
+      "tag": "0003_supreme_living_mummy",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,7 @@ import type { RuleContext } from '../db/json-shapes';
 export type RuleNotationParts = {
   target_phoneme_id: string | null;
   target_group_id: string | null;
-  output_phoneme_id: string;
+  output_phoneme_id: string | null;
   left_context: RuleContext;
   right_context: RuleContext;
 };
@@ -49,7 +49,8 @@ export function formatContext(
 /**
  * Renders a rule in standard phonological notation: `t → d / V _ #`.
  * The environment (`/ left _ right`) is elided entirely when both contexts
- * are empty — an unconditional rewrite reads as just `t → d`.
+ * are empty — an unconditional rewrite reads as just `t → d`. A `null`
+ * `output_phoneme_id` renders as `∅` (deletion).
  *
  * Pure and dependency-free (like `app/db/json-shapes.ts`), so unlike the rest
  * of `app/lib/*` it is safe to import from Client Components — the rules UI
@@ -66,7 +67,10 @@ export function formatRule(
       : rule.target_group_id !== null
         ? (groupNameById.get(rule.target_group_id) ?? '?')
         : '?';
-  const output = phonemeSymbolById.get(rule.output_phoneme_id) ?? '?';
+  const output =
+    rule.output_phoneme_id === null
+      ? '∅'
+      : (phonemeSymbolById.get(rule.output_phoneme_id) ?? '?');
 
   const left = formatContext(
     rule.left_context,

@@ -20,6 +20,8 @@ type Rule = typeof rules.$inferSelect;
  * failure returns a field-shaped validation Result instead of forwarding.
  * The target radio (`target_kind`) + picker (`target_id`) pair is translated
  * into the XOR `target_phoneme_id`/`target_group_id` fields the schema expects.
+ * `output_phoneme_id` is sent as `undefined` when the form's ∅ option is
+ * selected (an empty string), which the schema treats as deletion.
  */
 function ruleInputFromForm(formData: FormData): Result<never> | { ok: true; data: unknown } {
   const contexts: Record<'left_context' | 'right_context', unknown> = {
@@ -40,13 +42,14 @@ function ruleInputFromForm(formData: FormData): Result<never> | { ok: true; data
 
   const targetKind = String(formData.get('target_kind'));
   const targetId = String(formData.get('target_id'));
+  const rawOutput = formData.get('output_phoneme_id');
 
   return {
     ok: true,
     data: {
       target_phoneme_id: targetKind === 'phoneme' ? targetId : undefined,
       target_group_id: targetKind === 'group' ? targetId : undefined,
-      output_phoneme_id: String(formData.get('output_phoneme_id')),
+      output_phoneme_id: rawOutput ? String(rawOutput) : undefined,
       left_context: contexts.left_context,
       right_context: contexts.right_context,
     },

@@ -24,8 +24,9 @@ export async function GET(_req: Request, { params }: Params) {
  * POST /api/languages/[id]/rules
  * Creates a new rule for the language, appended to the end of the application
  * order (`position` is server-assigned and not accepted in the body).
- * Body: `{ target_phoneme_id?: string; target_group_id?: string; output_phoneme_id: string;
- * left_context: RuleContext; right_context: RuleContext }` — exactly one target field.
+ * Body: `{ target_phoneme_id?: string; target_group_id?: string; output_phoneme_id?: string;
+ * left_context: RuleContext; right_context: RuleContext }` — exactly one target field;
+ * an absent `output_phoneme_id` means deletion (Ø).
  * Returns the created rule row with status 201.
  */
 export async function POST(req: Request, { params }: Params) {

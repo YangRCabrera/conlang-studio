@@ -29,7 +29,7 @@ type Rule = typeof rules.$inferSelect;
 type RuleInput = {
   target_phoneme_id?: string;
   target_group_id?: string;
-  output_phoneme_id: string;
+  output_phoneme_id?: string;
   left_context: RuleContext;
   right_context: RuleContext;
 };
@@ -37,14 +37,16 @@ type RuleInput = {
 /**
  * Collects every phoneme and group id a rule references: the target/output FK
  * fields plus the slots inside both jsonb contexts. Boundary slots carry no id
- * and are skipped. Not `separateTemplateIds` from wordgen — that helper assumes
- * every non-phoneme slot is a group, which is false once boundaries exist.
+ * and are skipped, as is an absent `output_phoneme_id` (deletion). Not
+ * `separateTemplateIds` from wordgen — that helper assumes every non-phoneme
+ * slot is a group, which is false once boundaries exist.
  */
 function collectRuleReferenceIds(input: RuleInput): {
   phonemeIds: Set<string>;
   groupIds: Set<string>;
 } {
-  const phonemeIds = new Set<string>([input.output_phoneme_id]);
+  const phonemeIds = new Set<string>();
+  if (input.output_phoneme_id) phonemeIds.add(input.output_phoneme_id);
   const groupIds = new Set<string>();
   if (input.target_phoneme_id) phonemeIds.add(input.target_phoneme_id);
   if (input.target_group_id) groupIds.add(input.target_group_id);
@@ -165,7 +167,7 @@ export async function loadCompiledRules(
   const outputIds = new Set<string>();
   const groupIds = new Set<string>();
   for (const rule of ruleRows) {
-    outputIds.add(rule.output_phoneme_id);
+    if (rule.output_phoneme_id) outputIds.add(rule.output_phoneme_id);
     if (rule.target_group_id) groupIds.add(rule.target_group_id);
     for (const slot of [...rule.left_context, ...rule.right_context]) {
       if (slot.kind === 'group') groupIds.add(slot.groupId);
@@ -251,7 +253,7 @@ export async function createRuleSvc(
       position: sql`(SELECT COALESCE(MAX(${rules.position}) + 1, 0) FROM ${rules} WHERE ${rules.language_id} = ${lang.data.id})`,
       target_phoneme_id: input.data.target_phoneme_id ?? null,
       target_group_id: input.data.target_group_id ?? null,
-      output_phoneme_id: input.data.output_phoneme_id,
+      output_phoneme_id: input.data.output_phoneme_id ?? null,
       left_context: input.data.left_context,
       right_context: input.data.right_context,
     })
@@ -301,7 +303,7 @@ export async function updateRuleSvc(
     .set({
       target_phoneme_id: input.data.target_phoneme_id ?? null,
       target_group_id: input.data.target_group_id ?? null,
-      output_phoneme_id: input.data.output_phoneme_id,
+      output_phoneme_id: input.data.output_phoneme_id ?? null,
       left_context: input.data.left_context,
       right_context: input.data.right_context,
     })

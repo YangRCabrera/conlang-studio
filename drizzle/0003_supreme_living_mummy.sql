@@ -1,0 +1,1 @@
+ALTER TABLE "rules" ALTER COLUMN "output_phoneme_id" DROP NOT NULL;

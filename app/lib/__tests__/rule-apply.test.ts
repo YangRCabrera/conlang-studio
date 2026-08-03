@@ -42,12 +42,15 @@ const groupSlot = (groupId: string, optional = false): RuleContext[number] => ({
 });
 const boundary: RuleContext[number] = { kind: 'boundary' };
 
-/** Compiles a single rule with defaults: phoneme target, empty contexts. */
-function rule(parts: Partial<RuleParts> & { output: string }) {
+/**
+ * Compiles a single rule with defaults: phoneme target, empty contexts.
+ * Omitting `output` compiles a deletion rule (Ø): `output_phoneme_id` null.
+ */
+function rule(parts: Partial<RuleParts> & { output?: string }) {
   const row: RuleParts = {
     target_phoneme_id: parts.target_phoneme_id ?? null,
     target_group_id: parts.target_group_id ?? null,
-    output_phoneme_id: P(parts.output),
+    output_phoneme_id: parts.output ? P(parts.output) : null,
     left_context: parts.left_context ?? [],
     right_context: parts.right_context ?? [],
   };
@@ -206,5 +209,58 @@ describe('applyRules — application semantics', () => {
 
   it('returns the word unchanged when there are no rules', () => {
     expect(surface(applyRules(word('tati'), []))).toBe('tati');
+  });
+});
+
+describe('applyRules — deletion (Ø output)', () => {
+  it('deletes every occurrence of a phoneme target, shortening the word', () => {
+    const rules = rule({ target_phoneme_id: P('t') });
+    const result = applyRules(word('tati'), rules);
+    expect(surface(result)).toBe('ai');
+    expect(result).toHaveLength(2);
+  });
+
+  it('deletes every member of a group target', () => {
+    const rules = rule({ target_group_id: G_VOWELS });
+    expect(surface(applyRules(word('tati'), rules))).toBe('tt');
+  });
+
+  it('respects context when deleting', () => {
+    // t → Ø / _ #  (word-final t only)
+    const rules = rule({
+      target_phoneme_id: P('t'),
+      right_context: [boundary],
+    });
+    expect(surface(applyRules(word('tatat'), rules))).toBe('tata');
+  });
+
+  it('deletes multiple non-adjacent matches from the same snapshot in one pass', () => {
+    // a → Ø / t _ t  on "tatat": both a's sit between two t's
+    const rules = rule({
+      target_phoneme_id: P('a'),
+      left_context: [phonemeSlot('t')],
+      right_context: [phonemeSlot('t')],
+    });
+    expect(surface(applyRules(word('tatat'), rules))).toBe('ttt');
+  });
+
+  it('a later rule sees the word as shortened by an earlier deletion', () => {
+    // rule 1: t → Ø ; rule 2: a → i / # _ (word-initial a)
+    const rules = [
+      ...rule({ target_phoneme_id: P('t') }),
+      ...rule({
+        target_phoneme_id: P('a'),
+        output: 'i',
+        left_context: [boundary],
+      }),
+    ];
+    // "tata" -> delete t's -> "aa" -> word-initial a -> i -> "ia"
+    expect(surface(applyRules(word('tata'), rules))).toBe('ia');
+  });
+
+  it('deleting an entire word yields an empty token array', () => {
+    const rules = rule({ target_group_id: G_VOWELS });
+    const result = applyRules(word('ai'), rules);
+    expect(result).toHaveLength(0);
   });
 });

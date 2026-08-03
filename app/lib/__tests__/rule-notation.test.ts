@@ -143,4 +143,29 @@ describe('formatRule', () => {
       ),
     ).toBe('? → ?');
   });
+
+  it('renders a null output as ∅ (deletion)', () => {
+    expect(
+      formatRule(
+        { ...base, output_phoneme_id: null, left_context: [], right_context: [] },
+        phonemeSymbolById,
+        groupNameById,
+      ),
+    ).toBe('t → ∅');
+  });
+
+  it('renders a deletion rule with an environment', () => {
+    expect(
+      formatRule(
+        {
+          ...base,
+          output_phoneme_id: null,
+          left_context: [vowel()],
+          right_context: [boundary],
+        },
+        phonemeSymbolById,
+        groupNameById,
+      ),
+    ).toBe('t → ∅ / V _ #');
+  });
 });

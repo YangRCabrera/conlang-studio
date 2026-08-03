@@ -203,7 +203,7 @@ function RuleRow({
           rule.target_phoneme_id !== null ? 'phoneme' : 'group'
         }
         initialTargetId={rule.target_phoneme_id ?? rule.target_group_id ?? ''}
-        initialOutputId={rule.output_phoneme_id}
+        initialOutputId={rule.output_phoneme_id ?? ''}
         initialLeftContext={rule.left_context}
         initialRightContext={rule.right_context}
         phonemes={phonemes}
@@ -509,20 +509,19 @@ function RuleForm({
   const targetOptions = targetKind === 'phoneme' ? phonemes : groups;
   const errorMessage = formErrorMessage(state);
 
-  const preview =
-    targetId && outputId
-      ? formatRule(
-          {
-            target_phoneme_id: targetKind === 'phoneme' ? targetId : null,
-            target_group_id: targetKind === 'group' ? targetId : null,
-            output_phoneme_id: outputId,
-            left_context: leftContext,
-            right_context: rightContext,
-          },
-          phonemeSymbolById,
-          groupNameById,
-        )
-      : '—';
+  const preview = targetId
+    ? formatRule(
+        {
+          target_phoneme_id: targetKind === 'phoneme' ? targetId : null,
+          target_group_id: targetKind === 'group' ? targetId : null,
+          output_phoneme_id: outputId || null,
+          left_context: leftContext,
+          right_context: rightContext,
+        },
+        phonemeSymbolById,
+        groupNameById,
+      )
+    : '—';
 
   return (
     <form
@@ -588,6 +587,7 @@ function RuleForm({
           aria-label="Output phoneme"
           className="border rounded p-2 text-sm bg-card"
         >
+          <option value="">∅ (delete)</option>
           {phonemes.map((p) => (
             <option key={p.id} value={p.id}>
               {p.symbol}
@@ -625,11 +625,7 @@ function RuleForm({
 
       {/* Commit or cancel */}
       <div className="flex flex-row gap-2 self-end">
-        <Button
-          type="submit"
-          disabled={pending || !targetId || !outputId}
-          className="w-32"
-        >
+        <Button type="submit" disabled={pending || !targetId} className="w-32">
           {mode === 'Add' ? 'Add' : 'Save'}
         </Button>
         <Button
@@ -690,8 +686,8 @@ export default function RuleList({
       )}
       {rules.length === 0 ? (
         <p className="text-muted-foreground">
-          No rules yet. Rules rewrite one sound into another when its neighbors
-          match — add one above.
+          No rules yet. Rules rewrite one sound into another (or delete it)
+          when its neighbors match — add one above.
         </p>
       ) : (
         <>

@@ -114,6 +114,7 @@ export const updateSyllableStructureInputSchema = z.object({
  * Validates a new phonological rewrite rule.
  * Exactly one of `target_phoneme_id` or `target_group_id` must be present —
  * the rule matches either a single phoneme or every member of a group.
+ * `output_phoneme_id` is optional — absent means deletion (Ø).
  */
 export const createRuleSchema = z
   .object({
@@ -121,7 +122,7 @@ export const createRuleSchema = z
     position: z.int().nonnegative(),
     target_phoneme_id: z.uuid().optional(),
     target_group_id: z.uuid().optional(),
-    output_phoneme_id: z.uuid(),
+    output_phoneme_id: z.uuid().optional(),
     left_context: contextSchema,
     right_context: contextSchema,
   })
@@ -142,12 +143,14 @@ export const createRuleSchema = z
  * Exactly one of `target_phoneme_id` or `target_group_id` must be present (mirrors the
  * `target_check` DB constraint). Boundary slots are accepted anywhere inside a context —
  * restricting them to the outer edge is deliberately not enforced.
+ * `output_phoneme_id` is optional — absent means deletion (Ø): the target is removed
+ * rather than rewritten.
  */
 const ruleInputSchema = z
   .object({
     target_phoneme_id: z.uuid().optional(),
     target_group_id: z.uuid().optional(),
-    output_phoneme_id: z.uuid(),
+    output_phoneme_id: z.uuid().optional(),
     left_context: contextSchema,
     right_context: contextSchema,
   })

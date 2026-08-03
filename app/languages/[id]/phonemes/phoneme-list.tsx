@@ -1,6 +1,12 @@
 'use client';
 
-import { useActionState, useId, useRef, useState } from 'react';
+import {
+  useActionState,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import { createPhoneme, updatePhoneme, deletePhoneme } from './actions';
 import type { phonemes } from '@/app/db/schema';
 import { anyFieldError, failureMessage } from '@/app/components/action-state';
@@ -159,14 +165,26 @@ function AddPhonemeForm({
   languageId: string;
   symbolInputRef: React.RefObject<HTMLInputElement | null>;
 }) {
+  const formRef = useRef<{ reset: () => void }>(null);
+
+  // Wrapped (rather than plain-bound) so the form can clear its fields on
+  // success from the event, avoiding a setState-in-effect.
   const [state, formAction, pending] = useActionState(
-    createPhoneme.bind(null, languageId),
+    async (
+      prev: Awaited<ReturnType<typeof createPhoneme>> | null,
+      formData: FormData,
+    ) => {
+      const result = await createPhoneme(languageId, prev, formData);
+      if (result.ok) formRef.current?.reset();
+      return result;
+    },
     null,
   );
 
   return (
     <div className="mb-6">
       <PhonemeForm
+        ref={formRef}
         mode="Add"
         formAction={formAction}
         pending={pending}
@@ -185,10 +203,12 @@ function AddPhonemeForm({
 function PhonemeForm({
   formAction,
   pending,
+  ref,
   ...props
 }: {
   formAction: (payload: FormData) => void;
   pending: boolean;
+  ref?: React.Ref<{ reset: () => void }>;
 } & (
   | { mode: 'Add'; symbolInputRef: React.RefObject<HTMLInputElement | null> }
   | { mode: 'Edit'; phoneme: Phoneme; cancel: () => void }
@@ -203,6 +223,14 @@ function PhonemeForm({
   const [weight, setWeight] = useState(
     props.mode === 'Edit' ? props.phoneme.weight : 1,
   );
+
+  useImperativeHandle(ref, () => ({
+    reset: () => {
+      setSymbol('');
+      setIPA('');
+      setWeight(1);
+    },
+  }));
 
   return (
     <form action={formAction} className="flex flex-col gap-2">
